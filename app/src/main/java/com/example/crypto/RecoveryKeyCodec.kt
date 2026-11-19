@@ -172,6 +172,10 @@ object RecoveryKeyCodec {
             out.fill(0)
             throw InvalidRecoveryKeyException("Recovery key decoded length mismatch.")
         }
+        if (bitsLeft > 0 && (buffer and ((1 shl bitsLeft) - 1)) != 0) {
+            out.fill(0)
+            throw InvalidRecoveryKeyException("Recovery key trailing padding bits are invalid.")
+        }
         return out
     }
 }

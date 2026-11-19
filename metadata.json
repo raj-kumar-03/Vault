@@ -1,6 +1,6 @@
 {
-  "name": "SecureVault",
-  "description": "Local-first offline password manager prototype built with Midnight Emerald Material 3 design.",
+  "name": "Aran",
+  "description": "Local-first offline password manager and generator built with the Aran dark charcoal and lime design system.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

@@ -18,7 +18,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.ChevronRight
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -296,7 +296,7 @@ fun SettingsScreen(
             item(key = "appearance_section") {
                 SettingsSection(
                     title = "Appearance",
-                    subtitle = "Midnight Emerald dark-first visual system",
+                    subtitle = "Aran dark charcoal & lime visual system",
                 ) {
                     Column(
                         verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -331,7 +331,7 @@ fun SettingsScreen(
                     title = "About",
                 ) {
                     SettingsInfoRow(
-                        title = "SecureVault Android",
+                        title = "Aran Android",
                         subtitle = "Version 0.3.0-phase3 • Encrypted SQLite + Argon2id + AES-256-GCM + .svbk backups",
                         badge = "Phase 3",
                     )
@@ -387,7 +387,7 @@ fun SettingsScreen(
             title = { Text("Local-First Privacy Statement") },
             text = {
                 Text(
-                    "SecureVault does not connect to any cloud backend, analytics provider, crash reporter, or third-party API.\n\n" +
+                    "Aran does not connect to any cloud backend, analytics provider, crash reporter, or third-party API.\n\n" +
                         "Phase 3 Local Storage Notice: Vault headers and AES-256-GCM encrypted records persist strictly on-device in local SQLite, with versioned .svbk encrypted backup/restore. Hardware Keystore biometric binding and screen-capture defaults harden further in Phase 4."
                 )
             },
@@ -569,7 +569,7 @@ private fun SettingsActionRow(
             }
         } else {
             Icon(
-                imageVector = Icons.Outlined.ChevronRight,
+                imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
                 contentDescription = null,
                 tint = colors.textSecondary,
             )

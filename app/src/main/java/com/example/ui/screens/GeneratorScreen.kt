@@ -21,7 +21,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Refresh
-import androidx.compose.material.icons.outlined.Remove
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -49,6 +48,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import com.example.domain.model.GeneratorConfig
 import com.example.domain.model.GeneratorMode
+import com.example.ui.components.AranIcons
 import com.example.ui.components.CategoryChip
 import com.example.ui.components.CopyAction
 import com.example.ui.components.PasswordStrengthIndicator
@@ -385,7 +385,7 @@ private fun StepperRow(
                     modifier = Modifier.size(48.dp),
                 ) {
                     Icon(
-                        imageVector = Icons.Outlined.Remove,
+                        imageVector = AranIcons.Minus,
                         contentDescription = "Decrease $label",
                         tint = if (value > min) colors.textPrimary else colors.textSecondary.copy(alpha = 0.4f),
                     )

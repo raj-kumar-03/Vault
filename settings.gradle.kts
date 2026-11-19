@@ -22,6 +22,6 @@ dependencyResolutionManagement {
   }
 }
 
-rootProject.name = "SecureVault"
+rootProject.name = "Aran"
 
 include(":app")

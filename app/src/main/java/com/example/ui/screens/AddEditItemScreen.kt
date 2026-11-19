@@ -22,11 +22,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material.icons.outlined.AutoAwesome
-import androidx.compose.material.icons.outlined.Language
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Person
-import androidx.compose.material.icons.outlined.Title
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -53,6 +51,7 @@ import com.example.domain.model.GeneratorConfig
 import com.example.domain.model.PasswordEngine
 import com.example.domain.model.VaultItem
 import com.example.domain.model.VaultItemType
+import com.example.ui.components.AranIcons
 import com.example.ui.components.CategoryChip
 import com.example.ui.components.InlineError
 import com.example.ui.components.PrimaryButton
@@ -221,7 +220,7 @@ fun AddEditItemScreen(
                         label = { Text("Title") },
                         placeholder = { Text("e.g. CodeForge Git") },
                         leadingIcon = {
-                            Icon(Icons.Outlined.Title, contentDescription = null, tint = colors.textSecondary)
+                            Icon(Icons.Outlined.Edit, contentDescription = null, tint = colors.textSecondary)
                         },
                         singleLine = true,
                         isError = validationError != null && title.isBlank(),
@@ -285,7 +284,7 @@ fun AddEditItemScreen(
                     if (itemType == VaultItemType.LOGIN) {
                         SecondaryButton(
                             text = "Generate Strong Password",
-                            leadingIcon = Icons.Outlined.AutoAwesome,
+                            leadingIcon = AranIcons.Sparkle,
                             onClick = {
                                 secret = PasswordEngine.generate(GeneratorConfig(length = 20))
                                 revealSecret = true
@@ -305,7 +304,7 @@ fun AddEditItemScreen(
                         label = { Text("Website (optional)") },
                         placeholder = { Text("https://example.com") },
                         leadingIcon = {
-                            Icon(Icons.Outlined.Language, contentDescription = null, tint = colors.textSecondary)
+                            Icon(AranIcons.Globe, contentDescription = null, tint = colors.textSecondary)
                         },
                         supportingText = {
                             Text(

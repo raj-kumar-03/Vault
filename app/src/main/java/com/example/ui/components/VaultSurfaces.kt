@@ -23,28 +23,14 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Devices
-import androidx.compose.material.icons.filled.Key
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.outlined.Badge
-import androidx.compose.material.icons.outlined.Computer
-import androidx.compose.material.icons.outlined.CreditCard
-import androidx.compose.material.icons.outlined.Description
-import androidx.compose.material.icons.outlined.Devices
-import androidx.compose.material.icons.outlined.Fingerprint
-import androidx.compose.material.icons.outlined.Key
-import androidx.compose.material.icons.outlined.Laptop
 import androidx.compose.material.icons.outlined.Lock
-import androidx.compose.material.icons.outlined.PhoneAndroid
 import androidx.compose.material.icons.outlined.Settings
-import androidx.compose.material.icons.outlined.Shield
-import androidx.compose.material.icons.outlined.StarOutline
-import androidx.compose.material.icons.outlined.VerifiedUser
-import androidx.compose.material.icons.outlined.VpnKey
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -90,22 +76,22 @@ enum class PrimaryDestination(
     VAULT(
         route = "vault",
         label = "Vault",
-        selectedIcon = Icons.Filled.Shield,
-        unselectedIcon = Icons.Outlined.Shield,
+        selectedIcon = AranIcons.ShieldFilled,
+        unselectedIcon = AranIcons.Shield,
         testTag = "nav_vault",
     ),
     GENERATOR(
         route = "generator",
         label = "Generator",
-        selectedIcon = Icons.Filled.Key,
-        unselectedIcon = Icons.Outlined.Key,
+        selectedIcon = AranIcons.Key,
+        unselectedIcon = AranIcons.Key,
         testTag = "nav_generator",
     ),
     DEVICES(
         route = "devices",
         label = "Devices",
-        selectedIcon = Icons.Filled.Devices,
-        unselectedIcon = Icons.Outlined.Devices,
+        selectedIcon = AranIcons.Devices,
+        unselectedIcon = AranIcons.Devices,
         testTag = "nav_devices",
     ),
     SETTINGS(
@@ -151,7 +137,7 @@ fun AppScaffold(
                             ShieldEmblem(size = 44.dp, locked = false)
                             Spacer(modifier = Modifier.height(6.dp))
                             Text(
-                                text = "Vault",
+                                text = stringResource(R.string.app_name),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = colors.textSecondary,
                             )
@@ -298,10 +284,10 @@ fun VaultItemRow(
     Surface(
         onClick = onClick,
         shape = RoundedCornerShape(16.dp),
-        color = if (selected) colors.surfaceElevated else colors.surface,
+        color = if (selected) colors.surfaceHighest else colors.surfaceElevated,
         border = BorderStroke(
             width = 1.dp,
-            color = if (selected) colors.primary.copy(alpha = 0.7f) else colors.outline,
+            color = if (selected) colors.primary.copy(alpha = 0.75f) else colors.outlineSubtle,
         ),
         modifier = modifier
             .fillMaxWidth()
@@ -311,15 +297,15 @@ fun VaultItemRow(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 12.dp),
+                .padding(start = 14.dp, end = 8.dp, top = 12.dp, bottom = 12.dp),
         ) {
             Box(
                 contentAlignment = Alignment.Center,
                 modifier = Modifier
-                    .size(44.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(colors.primaryMuted.copy(alpha = 0.7f))
-                    .border(1.dp, colors.primary.copy(alpha = 0.28f), RoundedCornerShape(12.dp)),
+                    .size(42.dp)
+                    .clip(CircleShape)
+                    .background(colors.primaryMuted.copy(alpha = 0.85f))
+                    .border(1.dp, colors.primary.copy(alpha = 0.35f), CircleShape),
             ) {
                 Icon(
                     imageVector = typeIcon,
@@ -353,7 +339,7 @@ fun VaultItemRow(
                     Text(
                         text = item.normalizedDomain,
                         style = MaterialTheme.typography.labelSmall,
-                        color = colors.primary.copy(alpha = 0.85f),
+                        color = colors.primary.copy(alpha = 0.88f),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -365,11 +351,19 @@ fun VaultItemRow(
                 modifier = Modifier.testTag("favorite_toggle_${item.id}"),
             ) {
                 Icon(
-                    imageVector = if (item.isFavorite) Icons.Filled.Star else Icons.Outlined.StarOutline,
+                    imageVector = if (item.isFavorite) Icons.Filled.Star else AranIcons.StarOutline,
                     contentDescription = if (item.isFavorite) "Remove ${item.title} from favorites" else "Add ${item.title} to favorites",
                     tint = if (item.isFavorite) colors.warning else colors.textSecondary,
+                    modifier = Modifier.size(20.dp),
                 )
             }
+
+            Icon(
+                imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
+                contentDescription = null,
+                tint = colors.textSecondary,
+                modifier = Modifier.size(20.dp),
+            )
         }
     }
 }
@@ -385,7 +379,7 @@ fun SecurityStatusRow(
     val colors = VaultTheme.colors
     Surface(
         shape = RoundedCornerShape(16.dp),
-        color = colors.surface,
+        color = colors.surfaceElevated,
         border = BorderStroke(1.dp, colors.primary.copy(alpha = 0.35f)),
         modifier = modifier
             .fillMaxWidth()
@@ -395,18 +389,18 @@ fun SecurityStatusRow(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
                 .fillMaxWidth()
-                .background(colors.primaryMuted.copy(alpha = 0.25f))
+                .background(colors.primaryMuted.copy(alpha = 0.22f))
                 .padding(16.dp),
         ) {
             Box(
                 contentAlignment = Alignment.Center,
                 modifier = Modifier
-                    .size(44.dp)
-                    .clip(RoundedCornerShape(12.dp))
+                    .size(42.dp)
+                    .clip(CircleShape)
                     .background(colors.primaryMuted),
             ) {
                 Icon(
-                    imageVector = Icons.Outlined.VerifiedUser,
+                    imageVector = AranIcons.ShieldFilled,
                     contentDescription = null,
                     tint = colors.primary,
                     modifier = Modifier.size(22.dp),
@@ -435,9 +429,9 @@ fun SecurityStatusRow(
 
             Box(
                 modifier = Modifier
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(colors.surfaceElevated)
-                    .border(1.dp, colors.outline, RoundedCornerShape(8.dp))
+                    .clip(CircleShape)
+                    .background(colors.surface)
+                    .border(1.dp, colors.outline, CircleShape)
                     .padding(horizontal = 10.dp, vertical = 5.dp),
             ) {
                 Text(
@@ -458,9 +452,9 @@ fun DeviceCard(
 ) {
     val colors = VaultTheme.colors
     val platformIcon = when (device.platform) {
-        DevicePlatform.ANDROID -> Icons.Outlined.PhoneAndroid
-        DevicePlatform.LINUX -> Icons.Outlined.Laptop
-        DevicePlatform.WINDOWS -> Icons.Outlined.Computer
+        DevicePlatform.ANDROID -> AranIcons.PhoneAndroid
+        DevicePlatform.LINUX -> AranIcons.Laptop
+        DevicePlatform.WINDOWS -> AranIcons.Laptop
     }
     val statusBg = when (device.status) {
         DeviceStatus.THIS_DEVICE -> colors.primaryMuted
@@ -475,8 +469,8 @@ fun DeviceCard(
 
     Surface(
         shape = RoundedCornerShape(16.dp),
-        color = colors.surface,
-        border = BorderStroke(1.dp, colors.outline),
+        color = colors.surfaceElevated,
+        border = BorderStroke(1.dp, colors.outlineSubtle),
         modifier = modifier
             .fillMaxWidth()
             .testTag("device_card_${device.id}"),
@@ -492,16 +486,16 @@ fun DeviceCard(
                 Box(
                     contentAlignment = Alignment.Center,
                     modifier = Modifier
-                        .size(44.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(colors.surfaceElevated)
-                        .border(1.dp, colors.outline, RoundedCornerShape(12.dp)),
+                        .size(42.dp)
+                        .clip(CircleShape)
+                        .background(colors.surface)
+                        .border(1.dp, colors.outline, CircleShape),
                 ) {
                     Icon(
                         imageVector = platformIcon,
                         contentDescription = device.platform.label,
                         tint = if (device.status == DeviceStatus.REVOKED) colors.textSecondary else colors.primary,
-                        modifier = Modifier.size(22.dp),
+                        modifier = Modifier.size(20.dp),
                     )
                 }
 
@@ -522,7 +516,7 @@ fun DeviceCard(
 
                 Box(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
+                        .clip(CircleShape)
                         .background(statusBg)
                         .padding(horizontal = 10.dp, vertical = 4.dp),
                 ) {
@@ -548,7 +542,7 @@ fun DeviceCard(
                 if (onRevokeClick != null && device.status == DeviceStatus.ACTIVE) {
                     Surface(
                         onClick = onRevokeClick,
-                        shape = RoundedCornerShape(10.dp),
+                        shape = CircleShape,
                         color = colors.dangerContainer,
                         border = BorderStroke(1.dp, colors.danger.copy(alpha = 0.45f)),
                         modifier = Modifier
@@ -624,7 +618,7 @@ fun EmptyState(
 ) {
     val colors = VaultTheme.colors
     Surface(
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(18.dp),
         color = colors.surface,
         border = BorderStroke(1.dp, colors.outline),
         modifier = modifier.fillMaxWidth(),
@@ -640,15 +634,15 @@ fun EmptyState(
                 contentAlignment = Alignment.Center,
                 modifier = Modifier
                     .size(56.dp)
-                    .clip(RoundedCornerShape(16.dp))
+                    .clip(CircleShape)
                     .background(colors.surfaceElevated)
-                    .border(1.dp, colors.outline, RoundedCornerShape(16.dp)),
+                    .border(1.dp, colors.outline, CircleShape),
             ) {
                 Icon(
                     imageVector = icon,
                     contentDescription = null,
                     tint = colors.primary,
-                    modifier = Modifier.size(28.dp),
+                    modifier = Modifier.size(26.dp),
                 )
             }
             Text(
@@ -728,9 +722,9 @@ fun ConfirmationDialog(
 }
 
 fun itemTypeIcon(type: VaultItemType): ImageVector = when (type) {
-    VaultItemType.LOGIN -> Icons.Outlined.VpnKey
-    VaultItemType.PASSKEY -> Icons.Outlined.Fingerprint
-    VaultItemType.SECURE_NOTE -> Icons.Outlined.Description
-    VaultItemType.IDENTITY -> Icons.Outlined.Badge
-    VaultItemType.PAYMENT_CARD -> Icons.Outlined.CreditCard
+    VaultItemType.LOGIN -> AranIcons.Key
+    VaultItemType.PASSKEY -> AranIcons.Fingerprint
+    VaultItemType.SECURE_NOTE -> AranIcons.Description
+    VaultItemType.IDENTITY -> AranIcons.Badge
+    VaultItemType.PAYMENT_CARD -> AranIcons.CreditCard
 }

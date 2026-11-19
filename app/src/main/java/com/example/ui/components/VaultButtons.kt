@@ -17,9 +17,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Check
-import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.rounded.Lock
-import androidx.compose.material.icons.rounded.Shield
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -49,20 +47,21 @@ fun PrimaryButton(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     leadingIcon: ImageVector? = null,
+    trailingIcon: ImageVector? = null,
     testTag: String? = null,
 ) {
     val colors = VaultTheme.colors
     Button(
         onClick = onClick,
         enabled = enabled,
-        shape = RoundedCornerShape(14.dp),
+        shape = CircleShape,
         colors = ButtonDefaults.buttonColors(
             containerColor = colors.primary,
             contentColor = colors.onPrimary,
             disabledContainerColor = colors.surfaceElevated,
             disabledContentColor = colors.textSecondary.copy(alpha = 0.55f),
         ),
-        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 14.dp),
+        contentPadding = PaddingValues(horizontal = 22.dp, vertical = 14.dp),
         modifier = modifier
             .heightIn(min = 52.dp)
             .let { if (testTag != null) it.testTag(testTag) else it },
@@ -79,6 +78,14 @@ fun PrimaryButton(
             text = text,
             style = MaterialTheme.typography.labelLarge,
         )
+        if (trailingIcon != null) {
+            Spacer(modifier = Modifier.width(8.dp))
+            Icon(
+                imageVector = trailingIcon,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+            )
+        }
     }
 }
 
@@ -95,13 +102,13 @@ fun SecondaryButton(
     OutlinedButton(
         onClick = onClick,
         enabled = enabled,
-        shape = RoundedCornerShape(14.dp),
+        shape = CircleShape,
         border = BorderStroke(
             width = 1.dp,
             color = if (enabled) colors.outline else colors.outlineSubtle,
         ),
         colors = ButtonDefaults.outlinedButtonColors(
-            containerColor = colors.surfaceElevated.copy(alpha = 0.72f),
+            containerColor = colors.surfaceElevated.copy(alpha = 0.78f),
             contentColor = colors.textPrimary,
             disabledContainerColor = colors.surface.copy(alpha = 0.4f),
             disabledContentColor = colors.textSecondary.copy(alpha = 0.5f),
@@ -140,7 +147,7 @@ fun DestructiveButton(
     OutlinedButton(
         onClick = onClick,
         enabled = enabled,
-        shape = RoundedCornerShape(14.dp),
+        shape = CircleShape,
         border = BorderStroke(
             width = 1.dp,
             color = if (enabled) colors.danger.copy(alpha = 0.55f) else colors.outlineSubtle,
@@ -172,6 +179,46 @@ fun DestructiveButton(
 }
 
 @Composable
+fun InlineAccentPill(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    testTag: String? = null,
+) {
+    val colors = VaultTheme.colors
+    Surface(
+        onClick = onClick,
+        shape = CircleShape,
+        color = colors.primary,
+        contentColor = colors.onPrimary,
+        modifier = modifier
+            .defaultMinSize(minWidth = 48.dp, minHeight = 36.dp)
+            .let { if (testTag != null) it.testTag(testTag) else it },
+    ) {
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier
+                .defaultMinSize(minHeight = 36.dp)
+                .clip(CircleShape),
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center,
+                modifier = Modifier.defaultMinSize(minHeight = 36.dp),
+            ) {
+                Spacer(modifier = Modifier.width(14.dp))
+                Text(
+                    text = text,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = colors.onPrimary,
+                )
+                Spacer(modifier = Modifier.width(14.dp))
+            }
+        }
+    }
+}
+
+@Composable
 fun CopyAction(
     label: String,
     copied: Boolean,
@@ -188,7 +235,7 @@ fun CopyAction(
 
     Surface(
         onClick = onClick,
-        shape = RoundedCornerShape(12.dp),
+        shape = CircleShape,
         color = containerColor,
         border = BorderStroke(1.dp, borderColor),
         modifier = modifier
@@ -207,9 +254,9 @@ fun CopyAction(
         ) {
             Spacer(modifier = Modifier.width(12.dp))
             Icon(
-                imageVector = if (copied) Icons.Outlined.Check else Icons.Outlined.ContentCopy,
+                imageVector = if (copied) Icons.Outlined.Check else AranIcons.ContentCopy,
                 contentDescription = null,
-                tint = if (copied) colors.primary else colors.primary,
+                tint = colors.primary,
                 modifier = Modifier.size(18.dp),
             )
             Spacer(modifier = Modifier.width(8.dp))
@@ -239,20 +286,20 @@ fun ShieldEmblem(
             .background(
                 Brush.radialGradient(
                     colors = listOf(
-                        colors.primaryMuted.copy(alpha = 0.9f),
-                        colors.surfaceElevated.copy(alpha = 0.85f),
+                        colors.primaryMuted.copy(alpha = 0.95f),
+                        colors.surfaceElevated.copy(alpha = 0.9f),
                     )
                 )
             )
             .border(
                 width = 1.dp,
-                color = colors.primary.copy(alpha = 0.45f),
+                color = colors.primary.copy(alpha = 0.5f),
                 shape = CircleShape,
             )
             .semantics { contentDescription = emblemDescription },
     ) {
         Icon(
-            imageVector = Icons.Rounded.Shield,
+            imageVector = AranIcons.ShieldFilled,
             contentDescription = null,
             tint = colors.primary,
             modifier = Modifier.size(size * 0.56f),

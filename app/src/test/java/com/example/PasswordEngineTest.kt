@@ -71,4 +71,59 @@ class PasswordEngineTest {
         val result = PasswordEngine.normalizeDomain("not a domain")
         assertFalse(result.isValid)
     }
+
+    @Test
+    fun `password health analyzer detects weak reused short and strong logins offline`() {
+        val items = listOf(
+            com.example.domain.model.VaultItem(
+                id = "1",
+                type = com.example.domain.model.VaultItemType.LOGIN,
+                title = "Strong Service",
+                username = "a@example.com",
+                secret = "Pine-Harbor-48!Quartz",
+                website = "https://strong.example.com",
+                normalizedDomain = "strong.example.com",
+                notes = "",
+                isFavorite = false,
+                createdAtLabel = "Now",
+                updatedAtLabel = "Now",
+                lastUsedEpochMs = 1L,
+            ),
+            com.example.domain.model.VaultItem(
+                id = "2",
+                type = com.example.domain.model.VaultItemType.LOGIN,
+                title = "Reused Alpha",
+                username = "b@example.com",
+                secret = "abc123",
+                website = "https://alpha.example.com",
+                normalizedDomain = "alpha.example.com",
+                notes = "",
+                isFavorite = false,
+                createdAtLabel = "Now",
+                updatedAtLabel = "Now",
+                lastUsedEpochMs = 2L,
+            ),
+            com.example.domain.model.VaultItem(
+                id = "3",
+                type = com.example.domain.model.VaultItemType.LOGIN,
+                title = "Reused Beta",
+                username = "c@example.com",
+                secret = "abc123",
+                website = "https://beta.example.com",
+                normalizedDomain = "beta.example.com",
+                notes = "",
+                isFavorite = false,
+                createdAtLabel = "Now",
+                updatedAtLabel = "Now",
+                lastUsedEpochMs = 3L,
+            ),
+        )
+        val report = com.example.domain.model.PasswordHealthAnalyzer.analyze(items)
+        assertEquals(3, report.totalLogins)
+        assertEquals(1, report.strongItems.size)
+        assertEquals(2, report.weakItems.size)
+        assertEquals(2, report.reusedItems.size)
+        assertEquals(2, report.shortItems.size)
+        assertTrue(report.overallScorePercent < 60)
+    }
 }

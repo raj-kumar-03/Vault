@@ -17,10 +17,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.CloudOff
-import androidx.compose.material.icons.outlined.Key
-import androidx.compose.material.icons.outlined.Restore
-import androidx.compose.material.icons.outlined.WarningAmber
+import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -34,6 +31,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
+import com.example.ui.components.AranIcons
 import com.example.ui.components.PrimaryButton
 import com.example.ui.theme.VaultTheme
 
@@ -68,24 +66,24 @@ fun RecoveryInfoSheet(
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             val title = when (mode) {
-                EducationSheetMode.RECOVERY -> "How Local Recovery Will Work"
+                EducationSheetMode.RECOVERY -> "How Local Recovery Works"
                 EducationSheetMode.RESTORE_COMING_SOON -> "Restore Encrypted Backup"
             }
             val badge = when (mode) {
-                EducationSheetMode.RECOVERY -> "Planned • Phases 2 & 3"
-                EducationSheetMode.RESTORE_COMING_SOON -> "Coming in Phase 3"
+                EducationSheetMode.RECOVERY -> "Active • Phase 3"
+                EducationSheetMode.RESTORE_COMING_SOON -> "Active • .svbk v1"
             }
 
             Box(
                 modifier = Modifier
                     .clip(RoundedCornerShape(8.dp))
-                    .background(colors.warningContainer)
+                    .background(colors.primaryMuted)
                     .padding(horizontal = 10.dp, vertical = 4.dp),
             ) {
                 Text(
                     text = badge,
                     style = MaterialTheme.typography.labelSmall,
-                    color = colors.warning,
+                    color = colors.primary,
                 )
             }
 
@@ -95,36 +93,28 @@ fun RecoveryInfoSheet(
                 color = colors.textPrimary,
             )
 
-            if (mode == EducationSheetMode.RESTORE_COMING_SOON) {
-                Text(
-                    text = "Backup export and restoration are intentionally disabled in Phase 1. No real credentials are encrypted or persisted yet.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = colors.textSecondary,
-                )
-            } else {
-                Text(
-                    text = "SecureVault is designed to operate completely offline with no cloud account, no password reset email, and no server holding your keys.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = colors.textSecondary,
-                )
-            }
+            Text(
+                text = "Aran operates completely offline with no cloud account, no password reset email, and no server holding your keys.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = colors.textSecondary,
+            )
 
             InfoPointCard(
-                icon = Icons.Outlined.CloudOff,
+                icon = AranIcons.CloudOff,
                 title = "No Cloud Reset",
-                body = "Because nothing leaves your device without explicit local sync, nobody—not even the app developers—can reset a forgotten master password.",
+                body = "Because nothing leaves your device without explicit local export, nobody—not even the app developers—can reset a forgotten master password.",
             )
 
             InfoPointCard(
-                icon = Icons.Outlined.Key,
-                title = "Independent Recovery Key (Phase 2)",
-                body = "When cryptography lands in Phase 2, a separate high-entropy recovery key will wrap your Vault Encryption Key independently from your master password.",
+                icon = AranIcons.Key,
+                title = "Independent 256-bit Recovery Key",
+                body = "A separate high-entropy SVRK recovery key wraps your Vault Encryption Key independently via HKDF-SHA256.",
             )
 
             InfoPointCard(
-                icon = Icons.Outlined.Restore,
-                title = "Versioned Local Backups (Phase 3)",
-                body = "Phase 3 introduces versioned, authenticated local backup files with non-destructive restore verification.",
+                icon = AranIcons.Restore,
+                title = "Versioned .svbk Local Backups",
+                body = "Export and restore SHA-256 verified, AES-256-GCM encrypted backup files offline without touching your vault until every record passes authentication.",
             )
 
             Surface(
@@ -138,7 +128,7 @@ fun RecoveryInfoSheet(
                     modifier = Modifier.padding(14.dp),
                 ) {
                     Icon(
-                        imageVector = Icons.Outlined.WarningAmber,
+                        imageVector = Icons.Outlined.Warning,
                         contentDescription = null,
                         tint = colors.danger,
                         modifier = Modifier.size(20.dp),

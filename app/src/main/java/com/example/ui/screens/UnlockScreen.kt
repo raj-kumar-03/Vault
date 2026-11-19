@@ -21,7 +21,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Fingerprint
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -48,6 +47,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.example.R
 import com.example.data.PersistentVaultRepository
+import com.example.ui.components.AranIcons
 import com.example.ui.components.InlineError
 import com.example.ui.components.PrimaryButton
 import com.example.ui.components.SecretField
@@ -172,7 +172,7 @@ fun UnlockScreen(
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Icon(
-                                imageVector = Icons.Outlined.Fingerprint,
+                                imageVector = AranIcons.Fingerprint,
                                 contentDescription = null,
                                 tint = colors.primary,
                                 modifier = Modifier.size(36.dp),

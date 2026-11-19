@@ -4,45 +4,45 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 
-// Midnight Emerald Dark Tokens (design.md baseline, verified contrast)
-val EmeraldBackgroundDark = Color(0xFF0B1210)
-val EmeraldSurfaceDark = Color(0xFF111C18)
-val EmeraldSurfaceElevatedDark = Color(0xFF17251F)
-val EmeraldSurfaceHighestDark = Color(0xFF1E3028)
-val EmeraldPrimaryDark = Color(0xFF35C98A)
-val EmeraldOnPrimaryDark = Color(0xFF052015)
-val EmeraldPrimaryMutedDark = Color(0xFF153D2E)
-val EmeraldTextPrimaryDark = Color(0xFFEAF4EE)
-val EmeraldTextSecondaryDark = Color(0xFF9CB3A7)
-val EmeraldOutlineDark = Color(0xFF263830)
-val EmeraldOutlineSubtleDark = Color(0xFF1A2922)
-val EmeraldDangerDark = Color(0xFFF07878)
-val EmeraldOnDangerDark = Color(0xFF310B0E)
-val EmeraldDangerContainerDark = Color(0xFF3A1A1D)
-val EmeraldWarningDark = Color(0xFFE7B85C)
-val EmeraldWarningContainerDark = Color(0xFF352A14)
-val EmeraldInfoDark = Color(0xFF69B7E8)
-val EmeraldInfoContainerDark = Color(0xFF142A38)
+// Aran Dark Charcoal & Vibrant Lime Palette (derived from Reference UI)
+val AranBackgroundDark = Color(0xFF1E2221)
+val AranSurfaceDark = Color(0xFF282C2B)
+val AranSurfaceElevatedDark = Color(0xFF323736)
+val AranSurfaceHighestDark = Color(0xFF3C4240)
+val AranPrimaryDark = Color(0xFF90F726)
+val AranOnPrimaryDark = Color(0xFF111B07)
+val AranPrimaryMutedDark = Color(0xFF2A3B1E)
+val AranTextPrimaryDark = Color(0xFFF4F6F5)
+val AranTextSecondaryDark = Color(0xFF9CA3A0)
+val AranOutlineDark = Color(0xFF424846)
+val AranOutlineSubtleDark = Color(0xFF313735)
+val AranDangerDark = Color(0xFFF26D6D)
+val AranOnDangerDark = Color(0xFF2F0A0C)
+val AranDangerContainerDark = Color(0xFF3F2324)
+val AranWarningDark = Color(0xFFF3BA45)
+val AranWarningContainerDark = Color(0xFF3D321B)
+val AranInfoDark = Color(0xFF71BDF0)
+val AranInfoContainerDark = Color(0xFF1C303D)
 
-// Midnight Emerald Light Tokens (calm architectural mineral sage)
-val EmeraldBackgroundLight = Color(0xFFF3F7F5)
-val EmeraldSurfaceLight = Color(0xFFFFFFFF)
-val EmeraldSurfaceElevatedLight = Color(0xFFE9F1ED)
-val EmeraldSurfaceHighestLight = Color(0xFFDDE9E3)
-val EmeraldPrimaryLight = Color(0xFF147E54)
-val EmeraldOnPrimaryLight = Color(0xFFFFFFFF)
-val EmeraldPrimaryMutedLight = Color(0xFFD5EFE3)
-val EmeraldTextPrimaryLight = Color(0xFF0E1B16)
-val EmeraldTextSecondaryLight = Color(0xFF475E53)
-val EmeraldOutlineLight = Color(0xFFC8D7CF)
-val EmeraldOutlineSubtleLight = Color(0xFFDFE9E3)
-val EmeraldDangerLight = Color(0xFFC0393E)
-val EmeraldOnDangerLight = Color(0xFFFFFFFF)
-val EmeraldDangerContainerLight = Color(0xFFFCE8E8)
-val EmeraldWarningLight = Color(0xFF9A6A0E)
-val EmeraldWarningContainerLight = Color(0xFFFCF3DC)
-val EmeraldInfoLight = Color(0xFF1B6CA0)
-val EmeraldInfoContainerLight = Color(0xFFE3F1FA)
+// Aran Light Theme Parity (crisp mineral paper + high-contrast forest-lime accent)
+val AranBackgroundLight = Color(0xFFF4F6F5)
+val AranSurfaceLight = Color(0xFFFFFFFF)
+val AranSurfaceElevatedLight = Color(0xFFEAEEEC)
+val AranSurfaceHighestLight = Color(0xFFDFE5E2)
+val AranPrimaryLight = Color(0xFF2F7E09)
+val AranOnPrimaryLight = Color(0xFFFFFFFF)
+val AranPrimaryMutedLight = Color(0xFFE0F4D4)
+val AranTextPrimaryLight = Color(0xFF161A19)
+val AranTextSecondaryLight = Color(0xFF565E5B)
+val AranOutlineLight = Color(0xFFD1D8D5)
+val AranOutlineSubtleLight = Color(0xFFE4E9E7)
+val AranDangerLight = Color(0xFFC5393E)
+val AranOnDangerLight = Color(0xFFFFFFFF)
+val AranDangerContainerLight = Color(0xFFFCE8E8)
+val AranWarningLight = Color(0xFF9D6B0B)
+val AranWarningContainerLight = Color(0xFFFCF3DC)
+val AranInfoLight = Color(0xFF1B6CA0)
+val AranInfoContainerLight = Color(0xFFE3F1FA)
 
 @Immutable
 data class VaultSemanticColors(
@@ -68,46 +68,46 @@ data class VaultSemanticColors(
 )
 
 val DarkVaultSemanticColors = VaultSemanticColors(
-    background = EmeraldBackgroundDark,
-    surface = EmeraldSurfaceDark,
-    surfaceElevated = EmeraldSurfaceElevatedDark,
-    surfaceHighest = EmeraldSurfaceHighestDark,
-    primary = EmeraldPrimaryDark,
-    onPrimary = EmeraldOnPrimaryDark,
-    primaryMuted = EmeraldPrimaryMutedDark,
-    textPrimary = EmeraldTextPrimaryDark,
-    textSecondary = EmeraldTextSecondaryDark,
-    outline = EmeraldOutlineDark,
-    outlineSubtle = EmeraldOutlineSubtleDark,
-    danger = EmeraldDangerDark,
-    onDanger = EmeraldOnDangerDark,
-    dangerContainer = EmeraldDangerContainerDark,
-    warning = EmeraldWarningDark,
-    warningContainer = EmeraldWarningContainerDark,
-    info = EmeraldInfoDark,
-    infoContainer = EmeraldInfoContainerDark,
+    background = AranBackgroundDark,
+    surface = AranSurfaceDark,
+    surfaceElevated = AranSurfaceElevatedDark,
+    surfaceHighest = AranSurfaceHighestDark,
+    primary = AranPrimaryDark,
+    onPrimary = AranOnPrimaryDark,
+    primaryMuted = AranPrimaryMutedDark,
+    textPrimary = AranTextPrimaryDark,
+    textSecondary = AranTextSecondaryDark,
+    outline = AranOutlineDark,
+    outlineSubtle = AranOutlineSubtleDark,
+    danger = AranDangerDark,
+    onDanger = AranOnDangerDark,
+    dangerContainer = AranDangerContainerDark,
+    warning = AranWarningDark,
+    warningContainer = AranWarningContainerDark,
+    info = AranInfoDark,
+    infoContainer = AranInfoContainerDark,
     isDark = true,
 )
 
 val LightVaultSemanticColors = VaultSemanticColors(
-    background = EmeraldBackgroundLight,
-    surface = EmeraldSurfaceLight,
-    surfaceElevated = EmeraldSurfaceElevatedLight,
-    surfaceHighest = EmeraldSurfaceHighestLight,
-    primary = EmeraldPrimaryLight,
-    onPrimary = EmeraldOnPrimaryLight,
-    primaryMuted = EmeraldPrimaryMutedLight,
-    textPrimary = EmeraldTextPrimaryLight,
-    textSecondary = EmeraldTextSecondaryLight,
-    outline = EmeraldOutlineLight,
-    outlineSubtle = EmeraldOutlineSubtleLight,
-    danger = EmeraldDangerLight,
-    onDanger = EmeraldOnDangerLight,
-    dangerContainer = EmeraldDangerContainerLight,
-    warning = EmeraldWarningLight,
-    warningContainer = EmeraldWarningContainerLight,
-    info = EmeraldInfoLight,
-    infoContainer = EmeraldInfoContainerLight,
+    background = AranBackgroundLight,
+    surface = AranSurfaceLight,
+    surfaceElevated = AranSurfaceElevatedLight,
+    surfaceHighest = AranSurfaceHighestLight,
+    primary = AranPrimaryLight,
+    onPrimary = AranOnPrimaryLight,
+    primaryMuted = AranPrimaryMutedLight,
+    textPrimary = AranTextPrimaryLight,
+    textSecondary = AranTextSecondaryLight,
+    outline = AranOutlineLight,
+    outlineSubtle = AranOutlineSubtleLight,
+    danger = AranDangerLight,
+    onDanger = AranOnDangerLight,
+    dangerContainer = AranDangerContainerLight,
+    warning = AranWarningLight,
+    warningContainer = AranWarningContainerLight,
+    info = AranInfoLight,
+    infoContainer = AranInfoContainerLight,
     isDark = false,
 )
 

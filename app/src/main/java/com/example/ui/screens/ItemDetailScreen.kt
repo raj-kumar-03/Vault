@@ -24,14 +24,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.outlined.DeleteOutline
+import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
-import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.outlined.Person
-import androidx.compose.material.icons.outlined.Schedule
-import androidx.compose.material.icons.outlined.StarOutline
-import androidx.compose.material.icons.outlined.Visibility
-import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -54,6 +49,7 @@ import androidx.compose.ui.unit.dp
 import com.example.R
 import com.example.domain.model.VaultItem
 import com.example.domain.model.VaultItemType
+import com.example.ui.components.AranIcons
 import com.example.ui.components.ConfirmationDialog
 import com.example.ui.components.CopyAction
 import com.example.ui.components.DestructiveButton
@@ -196,7 +192,7 @@ fun ItemDetailContent(
                     modifier = Modifier.testTag("detail_favorite_button"),
                 ) {
                     Icon(
-                        imageVector = if (item.isFavorite) Icons.Filled.Star else Icons.Outlined.StarOutline,
+                        imageVector = if (item.isFavorite) Icons.Filled.Star else AranIcons.StarOutline,
                         contentDescription = stringResource(R.string.cd_favorite_toggle),
                         tint = if (item.isFavorite) colors.warning else colors.textSecondary,
                     )
@@ -379,7 +375,7 @@ fun ItemDetailContent(
                     ) {
                         SecondaryButton(
                             text = if (secretRevealed) "Hide" else "Reveal",
-                            leadingIcon = if (secretRevealed) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
+                            leadingIcon = if (secretRevealed) AranIcons.VisibilityOff else AranIcons.Visibility,
                             onClick = { secretRevealed = !secretRevealed },
                             modifier = Modifier.weight(1f),
                             testTag = "detail_reveal_secret_button",
@@ -414,7 +410,7 @@ fun ItemDetailContent(
                             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Icon(
-                                        imageVector = Icons.Outlined.Language,
+                                        imageVector = AranIcons.Globe,
                                         contentDescription = null,
                                         tint = colors.textSecondary,
                                         modifier = Modifier.size(16.dp),
@@ -479,7 +475,7 @@ fun ItemDetailContent(
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
-                            imageVector = Icons.Outlined.Schedule,
+                            imageVector = AranIcons.Schedule,
                             contentDescription = null,
                             tint = colors.textSecondary,
                             modifier = Modifier.size(16.dp),
@@ -515,7 +511,7 @@ fun ItemDetailContent(
                 )
                 DestructiveButton(
                     text = "Delete",
-                    leadingIcon = Icons.Outlined.DeleteOutline,
+                    leadingIcon = Icons.Outlined.Delete,
                     onClick = { showDeleteDialog = true },
                     modifier = Modifier.weight(1f),
                     testTag = "detail_delete_button",
@@ -529,7 +525,7 @@ fun ItemDetailContent(
     if (showDeleteDialog) {
         ConfirmationDialog(
             title = "Delete \"${item.title}\"?",
-            message = "This removes the item from your local Phase 1 mock vault immediately. Once local Wi-Fi sync is enabled in Phase 6, deletions will also propagate as tombstones to paired devices.",
+            message = "This permanently removes the encrypted record from your local SQLite vault. Exported .svbk backups created earlier are not modified.",
             confirmLabel = "Delete Item",
             isDestructive = true,
             onConfirm = {

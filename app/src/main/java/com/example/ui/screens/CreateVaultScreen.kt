@@ -22,9 +22,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.Lock
-import androidx.compose.material.icons.outlined.WarningAmber
+import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.Icon
@@ -49,6 +48,7 @@ import com.example.R
 import com.example.domain.model.GeneratorConfig
 import com.example.domain.model.GeneratorMode
 import com.example.domain.model.PasswordEngine
+import com.example.ui.components.AranIcons
 import com.example.ui.components.InlineError
 import com.example.ui.components.PasswordStrengthIndicator
 import com.example.ui.components.PrimaryButton
@@ -172,7 +172,7 @@ fun CreateVaultScreen(
 
                     SecondaryButton(
                         text = "Suggest 4-Word Passphrase",
-                        leadingIcon = Icons.Outlined.AutoAwesome,
+                        leadingIcon = AranIcons.Sparkle,
                         onClick = {
                             val suggestion = PasswordEngine.generate(
                                 GeneratorConfig(
@@ -223,21 +223,21 @@ fun CreateVaultScreen(
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
-                            imageVector = Icons.Outlined.WarningAmber,
+                            imageVector = Icons.Outlined.Warning,
                             contentDescription = null,
                             tint = colors.warning,
                             modifier = Modifier.size(20.dp),
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Recovery & Prototype Notice",
+                            text = "Offline Recovery Notice",
                             style = MaterialTheme.typography.titleSmall,
                             color = colors.warning,
                         )
                     }
 
                     Text(
-                        text = "Creating this vault generates a random 256-bit Vault Encryption Key (VEK) wrapped by Argon2id and an independent 256-bit Recovery Key. Because SecureVault has no cloud account, losing both makes the vault permanently unrecoverable.",
+                        text = "Creating this vault generates a random 256-bit Vault Encryption Key (VEK) wrapped by Argon2id and an independent 256-bit Recovery Key. Because Aran has no cloud account, losing both makes the vault permanently unrecoverable.",
                         style = MaterialTheme.typography.bodySmall,
                         color = colors.textSecondary,
                     )
@@ -278,7 +278,7 @@ fun CreateVaultScreen(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "I understand that forgetting both my master password and recovery key makes an encrypted vault unrecoverable, and that Phase 2 stores encrypted records in memory only until Phase 3.",
+                            text = "I understand that forgetting both my master password and recovery key makes my encrypted local SQLite vault permanently unrecoverable.",
                             style = MaterialTheme.typography.bodySmall,
                             color = colors.textPrimary,
                         )

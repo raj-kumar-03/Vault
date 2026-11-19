@@ -18,9 +18,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Key
 import androidx.compose.material.icons.outlined.Lock
-import androidx.compose.material.icons.outlined.WarningAmber
+import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -43,6 +42,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.example.domain.model.PasswordEngine
+import com.example.ui.components.AranIcons
 import com.example.ui.components.CopyAction
 import com.example.ui.components.InlineError
 import com.example.ui.components.PasswordStrengthIndicator
@@ -97,7 +97,7 @@ fun RecoveryKeyCreatedSheet(
                     .padding(horizontal = 10.dp, vertical = 4.dp),
             ) {
                 Text(
-                    text = "Phase 2 • 256-bit Independent Recovery Key",
+                    text = "256-bit Independent Recovery Key",
                     style = MaterialTheme.typography.labelSmall,
                     color = colors.primary,
                 )
@@ -152,14 +152,14 @@ fun RecoveryKeyCreatedSheet(
                     modifier = Modifier.padding(12.dp),
                 ) {
                     Icon(
-                        imageVector = Icons.Outlined.WarningAmber,
+                        imageVector = Icons.Outlined.Warning,
                         contentDescription = null,
                         tint = colors.warning,
                         modifier = Modifier.size(18.dp),
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "Shown once for this session. Remember that Phase 2 remains in-memory until Phase 3 SQLite persistence ships.",
+                        text = "Shown once upon vault creation. Store this key offline so you can still unlock your encrypted SQLite vault if you forget your master password.",
                         style = MaterialTheme.typography.bodySmall,
                         color = colors.warning,
                     )
@@ -362,7 +362,7 @@ fun RecoverVaultSheet(
                 label = { Text("Recovery Key") },
                 placeholder = { Text("SVRK-XXXXX-XXXXX-...") },
                 leadingIcon = {
-                    Icon(Icons.Outlined.Key, contentDescription = null, tint = colors.primary)
+                    Icon(AranIcons.Key, contentDescription = null, tint = colors.primary)
                 },
                 textStyle = VaultMonoBodyStyle.copy(color = colors.textPrimary),
                 shape = RoundedCornerShape(12.dp),

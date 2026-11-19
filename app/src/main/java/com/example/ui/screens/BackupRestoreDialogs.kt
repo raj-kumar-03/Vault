@@ -16,10 +16,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Key
 import androidx.compose.material.icons.outlined.Lock
-import androidx.compose.material.icons.outlined.VerifiedUser
-import androidx.compose.material.icons.outlined.WarningAmber
+import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -40,6 +38,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.example.crypto.VaultBackupCodec
+import com.example.ui.components.AranIcons
 import com.example.ui.components.CategoryChip
 import com.example.ui.components.InlineError
 import com.example.ui.components.PrimaryButton
@@ -124,7 +123,7 @@ fun RestoreBackupSheet(
                     modifier = Modifier.padding(14.dp),
                 ) {
                     Icon(
-                        imageVector = Icons.Outlined.VerifiedUser,
+                        imageVector = AranIcons.ShieldFilled,
                         contentDescription = null,
                         tint = colors.primary,
                         modifier = Modifier.size(20.dp),
@@ -157,7 +156,7 @@ fun RestoreBackupSheet(
                         modifier = Modifier.padding(12.dp),
                     ) {
                         Icon(
-                            imageVector = Icons.Outlined.WarningAmber,
+                            imageVector = Icons.Outlined.Warning,
                             contentDescription = null,
                             tint = colors.warning,
                             modifier = Modifier.size(18.dp),
@@ -213,7 +212,7 @@ fun RestoreBackupSheet(
                     label = { Text("Backup Recovery Key") },
                     placeholder = { Text("SVRK-XXXXX-...") },
                     leadingIcon = {
-                        Icon(Icons.Outlined.Key, contentDescription = null, tint = colors.primary)
+                        Icon(AranIcons.Key, contentDescription = null, tint = colors.primary)
                     },
                     textStyle = VaultMonoBodyStyle.copy(color = colors.textPrimary),
                     shape = RoundedCornerShape(12.dp),

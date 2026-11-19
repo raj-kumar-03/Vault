@@ -3,6 +3,7 @@ package com.example.ui.screens
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,13 +19,9 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.CloudOff
-import androidx.compose.material.icons.outlined.Key
-import androidx.compose.material.icons.outlined.Restore
-import androidx.compose.material.icons.outlined.VerifiedUser
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -48,6 +45,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.example.R
+import com.example.ui.components.AranIcons
 import com.example.ui.components.PrimaryButton
 import com.example.ui.components.SecondaryButton
 import com.example.ui.components.ShieldEmblem
@@ -64,178 +62,229 @@ fun WelcomeScreen(
     var activeSheet by remember { mutableStateOf<EducationSheetMode?>(null) }
 
     Box(
+        contentAlignment = Alignment.TopCenter,
         modifier = Modifier
             .fillMaxSize()
-            .background(colors.background),
+            .background(colors.background)
+            .statusBarsPadding()
+            .navigationBarsPadding(),
     ) {
-        // Atmospheric Midnight Emerald alpine backdrop blended smoothly into background
-        Image(
-            painter = painterResource(id = R.drawable.img_welcome_emerald_peaks_1795093219314),
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier
-                .fillMaxSize()
-                .alpha(if (colors.isDark) 0.78f else 0.16f),
-        )
-
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.verticalGradient(
-                        0.0f to colors.background.copy(alpha = 0.86f),
-                        0.32f to colors.background.copy(alpha = 0.35f),
-                        0.58f to colors.background.copy(alpha = 0.72f),
-                        0.80f to colors.background.copy(alpha = 0.96f),
-                        1.0f to colors.background,
-                    )
-                ),
-        )
-
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier
                 .fillMaxSize()
-                .statusBarsPadding()
-                .navigationBarsPadding()
+                .widthIn(max = 520.dp)
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 24.dp, vertical = 20.dp),
+                .padding(horizontal = 20.dp, vertical = 16.dp),
         ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .widthIn(max = 520.dp),
+            // Top Aran brand header
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.fillMaxWidth(),
             ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    ShieldEmblem(size = 38.dp, locked = true)
+                    Text(
+                        text = stringResource(R.string.app_name),
+                        style = MaterialTheme.typography.titleLarge,
+                        color = colors.textPrimary,
+                    )
+                }
+
                 Box(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(colors.surfaceElevated.copy(alpha = 0.85f))
+                        .clip(CircleShape)
+                        .background(colors.surfaceElevated)
+                        .border(1.dp, colors.outline, CircleShape)
                         .padding(horizontal = 12.dp, vertical = 6.dp),
                 ) {
                     Text(
-                        text = stringResource(R.string.phase_one_badge),
+                        text = "Phase 3 • Offline",
                         style = MaterialTheme.typography.labelSmall,
                         color = colors.primary,
                     )
                 }
+            }
 
-                Spacer(modifier = Modifier.height(36.dp))
+            Spacer(modifier = Modifier.height(20.dp))
 
-                ShieldEmblem(size = 76.dp, locked = true)
-
-                Spacer(modifier = Modifier.height(20.dp))
-
-                Text(
-                    text = stringResource(R.string.app_name),
-                    style = MaterialTheme.typography.displaySmall,
-                    color = colors.textPrimary,
-                    textAlign = TextAlign.Center,
-                )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                Text(
-                    text = stringResource(R.string.tagline),
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = colors.textSecondary,
-                    textAlign = TextAlign.Center,
-                )
-
-                Spacer(modifier = Modifier.height(36.dp))
-
-                Surface(
-                    shape = RoundedCornerShape(16.dp),
-                    color = colors.surface.copy(alpha = 0.92f),
-                    border = BorderStroke(1.dp, colors.outline),
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Column(
-                        verticalArrangement = Arrangement.spacedBy(16.dp),
-                        modifier = Modifier.padding(18.dp),
-                    ) {
-                        WelcomePrincipleRow(
-                            icon = Icons.Outlined.CloudOff,
-                            title = "Offline & Local-First",
-                            description = "No cloud account, no remote servers, and no mandatory internet connection.",
-                        )
-                        WelcomePrincipleRow(
-                            icon = Icons.Outlined.Key,
-                            title = "Unrecoverable Without Your Keys",
-                            description = "Losing both your master password and recovery material will make a real vault unrecoverable.",
-                        )
-                        WelcomePrincipleRow(
-                            icon = Icons.Outlined.VerifiedUser,
-                            title = "Encrypted Local SQLite (Phase 3)",
-                            description = "Records persist offline in SQLite using Argon2id, HKDF-SHA256, and AES-256-GCM with AAD plus verified .svbk backups.",
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(28.dp))
-
-                PrimaryButton(
-                    text = "Create Vault",
-                    onClick = onCreateVault,
-                    enabled = !isBusy,
-                    modifier = Modifier.fillMaxWidth(),
-                    testTag = "welcome_create_vault_button",
-                )
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                SecondaryButton(
-                    text = if (isBusy) "Deriving Vault Key…" else "Explore Demo Vault",
-                    onClick = onExploreDemoVault,
-                    enabled = !isBusy,
-                    modifier = Modifier.fillMaxWidth(),
-                    testTag = "welcome_demo_vault_button",
-                )
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    TextButton(
-                        onClick = onRestoreBackup,
-                        enabled = !isBusy,
-                        modifier = Modifier.testTag("welcome_restore_button"),
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.Restore,
-                            contentDescription = null,
-                            tint = colors.textSecondary,
-                            modifier = Modifier.size(16.dp),
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = "Restore Backup",
-                            style = MaterialTheme.typography.labelLarge,
-                            color = colors.textSecondary,
-                        )
-                    }
-
-                    Text(
-                        text = "•",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = colors.outline,
+            // Textured dark graphic hero card (Aran reference hero)
+            Surface(
+                shape = RoundedCornerShape(24.dp),
+                color = colors.surfaceElevated,
+                border = BorderStroke(1.dp, colors.outline),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(216.dp),
+            ) {
+                Box(modifier = Modifier.fillMaxSize()) {
+                    Image(
+                        painter = painterResource(id = R.drawable.img_welcome_emerald_peaks_1795093219314),
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .alpha(if (colors.isDark) 0.55f else 0.28f),
                     )
-
-                    TextButton(
-                        onClick = { activeSheet = EducationSheetMode.RECOVERY },
-                        modifier = Modifier.testTag("welcome_learn_recovery_button"),
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(
+                                Brush.verticalGradient(
+                                    colors = listOf(
+                                        colors.background.copy(alpha = 0.25f),
+                                        colors.background.copy(alpha = 0.88f),
+                                    )
+                                )
+                            ),
+                    )
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(20.dp),
                     ) {
-                        Text(
-                            text = "Learn About Recovery",
-                            style = MaterialTheme.typography.labelLarge,
-                            color = colors.primary,
-                        )
+                        ShieldEmblem(size = 76.dp, locked = true)
+                        Spacer(modifier = Modifier.height(14.dp))
+                        Box(
+                            modifier = Modifier
+                                .clip(CircleShape)
+                                .background(colors.surface.copy(alpha = 0.9f))
+                                .border(1.dp, colors.primary.copy(alpha = 0.4f), CircleShape)
+                                .padding(horizontal = 14.dp, vertical = 6.dp),
+                        ) {
+                            Text(
+                                text = "Argon2id • AES-256-GCM • Local SQLite",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = colors.primary,
+                            )
+                        }
                     }
                 }
             }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // Bold value proposition headline & supporting copy
+            Text(
+                text = stringResource(R.string.tagline),
+                style = MaterialTheme.typography.headlineLarge,
+                color = colors.textPrimary,
+                textAlign = TextAlign.Center,
+            )
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Text(
+                text = "Generate strong passwords, audit vault health, and encrypt every record offline on your device—with zero cloud accounts.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = colors.textSecondary,
+                textAlign = TextAlign.Center,
+            )
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // Full-width Aran lime primary CTA pill with directional chevrons
+            PrimaryButton(
+                text = "Get Started",
+                onClick = onCreateVault,
+                enabled = !isBusy,
+                trailingIcon = AranIcons.DoubleChevronRight,
+                modifier = Modifier.fillMaxWidth(),
+                testTag = "welcome_create_vault_button",
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            SecondaryButton(
+                text = if (isBusy) "Deriving Vault Key…" else "Explore Demo Vault",
+                onClick = onExploreDemoVault,
+                enabled = !isBusy,
+                modifier = Modifier.fillMaxWidth(),
+                testTag = "welcome_demo_vault_button",
+            )
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                TextButton(
+                    onClick = onRestoreBackup,
+                    enabled = !isBusy,
+                    modifier = Modifier.testTag("welcome_restore_button"),
+                ) {
+                    Icon(
+                        imageVector = AranIcons.Restore,
+                        contentDescription = null,
+                        tint = colors.textSecondary,
+                        modifier = Modifier.size(16.dp),
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "Restore Backup",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = colors.textSecondary,
+                    )
+                }
+
+                Text(
+                    text = "•",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.outline,
+                )
+
+                TextButton(
+                    onClick = { activeSheet = EducationSheetMode.RECOVERY },
+                    modifier = Modifier.testTag("welcome_learn_recovery_button"),
+                ) {
+                    Text(
+                        text = "Learn About Recovery",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = colors.primary,
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(18.dp))
+
+            // Concise honest security guarantees card
+            Surface(
+                shape = RoundedCornerShape(18.dp),
+                color = colors.surface,
+                border = BorderStroke(1.dp, colors.outlineSubtle),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(14.dp),
+                    modifier = Modifier.padding(16.dp),
+                ) {
+                    WelcomePrincipleRow(
+                        icon = AranIcons.CloudOff,
+                        title = "Offline & Local-First",
+                        description = "No cloud account, no telemetry, and no mandatory internet connection.",
+                    )
+                    WelcomePrincipleRow(
+                        icon = AranIcons.Key,
+                        title = "Unrecoverable Without Your Keys",
+                        description = "Your master password and independent recovery key are the sole keys to your vault.",
+                    )
+                    WelcomePrincipleRow(
+                        icon = AranIcons.ShieldFilled,
+                        title = "Authenticated SQLite & .svbk Backups",
+                        description = "Per-record AES-256-GCM encryption with AAD and SHA-256 verified offline backups.",
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
         }
     }
 
@@ -262,8 +311,8 @@ private fun WelcomePrincipleRow(
             contentAlignment = Alignment.Center,
             modifier = Modifier
                 .size(36.dp)
-                .clip(RoundedCornerShape(10.dp))
-                .background(colors.primaryMuted.copy(alpha = 0.75f)),
+                .clip(CircleShape)
+                .background(colors.primaryMuted.copy(alpha = 0.8f)),
         ) {
             Icon(
                 imageVector = icon,

@@ -43,6 +43,8 @@ class SecureVaultUiTest {
             VaultDatabase::class.java,
         )
             .allowMainThreadQueries()
+            .setQueryExecutor { it.run() }
+            .setTransactionExecutor { it.run() }
             .build()
     }
 
@@ -74,6 +76,14 @@ class SecureVaultUiTest {
         composeTestRule.waitForIdle()
 
         composeTestRule.onNodeWithTag("vault_search_input").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("vault_item_list")
+            .performScrollToNode(hasTestTag("vault_inspect_health_button"))
+        composeTestRule.onNodeWithTag("vault_inspect_health_button").performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("health_screen_title").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("health_back_button").performClick()
+        composeTestRule.waitForIdle()
+
         composeTestRule.onNodeWithTag("vault_item_list")
             .performScrollToNode(hasTestTag("vault_item_mock-1"))
         composeTestRule.onNodeWithText("CodeForge Git").assertIsDisplayed()

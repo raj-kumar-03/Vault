@@ -23,9 +23,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.AddLink
 import androidx.compose.material.icons.outlined.Info
-import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -48,6 +46,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.example.domain.model.DeviceStatus
 import com.example.domain.model.PairedDevice
+import com.example.ui.components.AranIcons
 import com.example.ui.components.ConfirmationDialog
 import com.example.ui.components.DeviceCard
 import com.example.ui.components.PrimaryButton
@@ -145,7 +144,7 @@ fun DevicesScreen(
                 Spacer(modifier = Modifier.height(6.dp))
                 PrimaryButton(
                     text = "Preview Device Pairing Flow",
-                    leadingIcon = Icons.Outlined.AddLink,
+                    leadingIcon = AranIcons.Devices,
                     onClick = { showPairingPreview = true },
                     modifier = Modifier.fillMaxWidth(),
                     testTag = "devices_pair_preview_button",
@@ -266,7 +265,7 @@ private fun PairingPreviewSheet(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 Icon(
-                    imageVector = Icons.Outlined.Timer,
+                    imageVector = AranIcons.Schedule,
                     contentDescription = null,
                     tint = colors.primary,
                     modifier = Modifier.size(16.dp),

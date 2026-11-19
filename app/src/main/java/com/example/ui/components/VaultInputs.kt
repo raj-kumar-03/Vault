@@ -14,17 +14,14 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Close
-import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.Search
-import androidx.compose.material.icons.outlined.Shield
-import androidx.compose.material.icons.outlined.Visibility
-import androidx.compose.material.icons.outlined.VisibilityOff
-import androidx.compose.material.icons.outlined.WarningAmber
+import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -96,11 +93,11 @@ fun SearchField(
                 }
             }
         },
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(16.dp),
         textStyle = MaterialTheme.typography.bodyMedium.copy(color = colors.textPrimary),
         colors = OutlinedTextFieldDefaults.colors(
             focusedContainerColor = colors.surfaceElevated,
-            unfocusedContainerColor = colors.surface,
+            unfocusedContainerColor = colors.surfaceElevated.copy(alpha = 0.85f),
             focusedBorderColor = colors.primary,
             unfocusedBorderColor = colors.outline,
             cursorColor = colors.primary,
@@ -167,7 +164,7 @@ fun SecretField(
                 modifier = Modifier.testTag(toggleTestTag),
             ) {
                 Icon(
-                    imageVector = if (revealed) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
+                    imageVector = if (revealed) AranIcons.VisibilityOff else AranIcons.Visibility,
                     contentDescription = if (revealed) "Hide $label" else "Reveal $label",
                     tint = if (revealed) colors.primary else colors.textSecondary,
                 )
@@ -188,7 +185,7 @@ fun SecretField(
         } else {
             MaterialTheme.typography.bodyLarge.copy(color = colors.textPrimary)
         },
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(14.dp),
         colors = OutlinedTextFieldDefaults.colors(
             focusedContainerColor = colors.surfaceElevated,
             unfocusedContainerColor = colors.surface,
@@ -226,14 +223,14 @@ fun InlineError(
         verticalAlignment = Alignment.CenterVertically,
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(14.dp))
             .background(colors.dangerContainer)
-            .border(1.dp, colors.danger.copy(alpha = 0.45f), RoundedCornerShape(12.dp))
+            .border(1.dp, colors.danger.copy(alpha = 0.45f), RoundedCornerShape(14.dp))
             .padding(horizontal = 14.dp, vertical = 12.dp)
             .testTag(testTag),
     ) {
         Icon(
-            imageVector = Icons.Outlined.ErrorOutline,
+            imageVector = Icons.Outlined.Warning,
             contentDescription = null,
             tint = colors.danger,
             modifier = Modifier.size(18.dp),
@@ -260,8 +257,8 @@ fun PasswordStrengthIndicator(
         StrengthLevel.VERY_STRONG -> colors.primary
     }
     val statusIcon = when (strength.level) {
-        StrengthLevel.WEAK, StrengthLevel.FAIR -> Icons.Outlined.WarningAmber
-        StrengthLevel.STRONG, StrengthLevel.VERY_STRONG -> Icons.Outlined.Shield
+        StrengthLevel.WEAK, StrengthLevel.FAIR -> Icons.Outlined.Warning
+        StrengthLevel.STRONG, StrengthLevel.VERY_STRONG -> AranIcons.Shield
     }
 
     Column(
@@ -329,7 +326,7 @@ fun CategoryChip(
     val colors = VaultTheme.colors
     Surface(
         onClick = onClick,
-        shape = RoundedCornerShape(12.dp),
+        shape = CircleShape,
         color = if (selected) colors.primaryMuted else colors.surface,
         border = BorderStroke(
             width = 1.dp,
@@ -343,7 +340,7 @@ fun CategoryChip(
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
         ) {
             Text(
                 text = label,
@@ -354,11 +351,11 @@ fun CategoryChip(
                 Box(
                     contentAlignment = Alignment.Center,
                     modifier = Modifier
-                        .clip(RoundedCornerShape(6.dp))
+                        .clip(CircleShape)
                         .background(
-                            if (selected) colors.primary.copy(alpha = 0.2f) else colors.surfaceElevated
+                            if (selected) colors.primary.copy(alpha = 0.22f) else colors.surfaceElevated
                         )
-                        .padding(horizontal = 6.dp, vertical = 2.dp),
+                        .padding(horizontal = 7.dp, vertical = 2.dp),
                 ) {
                     Text(
                         text = count.toString(),

@@ -48,6 +48,7 @@ import com.example.ui.screens.CreateVaultScreen
 import com.example.ui.screens.DevicesScreen
 import com.example.ui.screens.GeneratorScreen
 import com.example.ui.screens.ItemDetailScreen
+import com.example.ui.screens.PasswordHealthScreen
 import com.example.ui.screens.RecoveryKeyCreatedSheet
 import com.example.ui.screens.RestoreBackupSheet
 import com.example.ui.screens.SettingsScreen
@@ -71,6 +72,7 @@ object VaultRoutes {
     const val ROUTE_CREATE_VAULT = "create_vault"
     const val ROUTE_UNLOCK = "unlock"
     const val ROUTE_MAIN = "main"
+    const val ROUTE_HEALTH = "health"
     const val ROUTE_DETAIL = "detail/{itemId}"
     const val ROUTE_EDITOR_NEW = "editor/new"
     const val ROUTE_EDITOR_EDIT = "editor/{itemId}"
@@ -176,7 +178,7 @@ fun SecureVaultApp(
             }
             stagedExportBytes = bytes
             val stamp = SimpleDateFormat("yyyyMMdd-HHmm", Locale.US).format(Date())
-            exportBackupLauncher.launch("securevault-backup-$stamp.svbk")
+            exportBackupLauncher.launch("aran-backup-$stamp.svbk")
         }
     }
 
@@ -372,6 +374,7 @@ fun SecureVaultApp(
                                 onToggleFavorite = resolvedViewModel::toggleFavorite,
                                 onAddItem = { navController.navigate(VaultRoutes.ROUTE_EDITOR_NEW) },
                                 onOpenGenerator = { activeTab = PrimaryDestination.GENERATOR },
+                                onOpenHealth = { navController.navigate(VaultRoutes.ROUTE_HEALTH) },
                                 onLockVault = { lockAndNavigate() },
                                 onEditItem = { itemId ->
                                     navController.navigate(VaultRoutes.edit(itemId))
@@ -453,6 +456,18 @@ fun SecureVaultApp(
                         onConfirmedSaved = resolvedViewModel::dismissRecoveryKeyReveal,
                     )
                 }
+            }
+
+            composable(VaultRoutes.ROUTE_HEALTH) {
+                PasswordHealthScreen(
+                    items = state.items,
+                    cryptoMetadata = state.cryptoMetadata,
+                    onBack = { navController.popBackStack() },
+                    onOpenItem = { item ->
+                        resolvedViewModel.selectItem(item.id)
+                        navController.navigate(VaultRoutes.detail(item.id))
+                    },
+                )
             }
 
             composable(
