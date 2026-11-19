@@ -30,6 +30,7 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -71,11 +72,11 @@ fun RestoreBackupSheet(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     var method by rememberSaveable { mutableStateOf(BackupRestoreMethod.MASTER_PASSWORD) }
-    var masterPassword by rememberSaveable { mutableStateOf("") }
-    var recoveryKey by rememberSaveable { mutableStateOf("") }
-    var newMasterPassword by rememberSaveable { mutableStateOf("") }
-    var revealSecret by rememberSaveable { mutableStateOf(false) }
-    var errorMessage by rememberSaveable { mutableStateOf<String?>(null) }
+    var masterPassword by remember { mutableStateOf("") }
+    var recoveryKey by remember { mutableStateOf("") }
+    var newMasterPassword by remember { mutableStateOf("") }
+    var revealSecret by remember { mutableStateOf(false) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,

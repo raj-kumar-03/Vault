@@ -64,12 +64,13 @@ fun CreateVaultScreen(
 ) {
     val colors = VaultTheme.colors
 
-    var masterPassword by rememberSaveable { mutableStateOf("") }
-    var confirmPassword by rememberSaveable { mutableStateOf("") }
-    var revealMaster by rememberSaveable { mutableStateOf(false) }
-    var revealConfirm by rememberSaveable { mutableStateOf(false) }
+    // Volatile remember ensures master passwords never serialize into Android savedInstanceState Bundles.
+    var masterPassword by remember { mutableStateOf("") }
+    var confirmPassword by remember { mutableStateOf("") }
+    var revealMaster by remember { mutableStateOf(false) }
+    var revealConfirm by remember { mutableStateOf(false) }
     var acknowledgedLossRisk by rememberSaveable { mutableStateOf(false) }
-    var validationError by rememberSaveable { mutableStateOf<String?>(null) }
+    var validationError by remember { mutableStateOf<String?>(null) }
     var showRecoverySheet by remember { mutableStateOf(false) }
 
     val strength = remember(masterPassword) {

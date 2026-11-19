@@ -3,7 +3,7 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <application
-        android:allowBackup="true"
+        android:allowBackup="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
         android:icon="@mipmap/ic_launcher"
@@ -22,6 +22,48 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <activity
+            android:name=".autofill.AutofillAuthActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:label="@string/autofill_auth_title"
+            android:theme="@style/Theme.MyApplication" />
+
+        <activity
+            android:name=".passkey.PasskeyAuthActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:label="@string/passkey_auth_title"
+            android:theme="@style/Theme.MyApplication" />
+
+        <service
+            android:name=".autofill.AranAutofillService"
+            android:exported="true"
+            android:label="@string/autofill_service_label"
+            android:permission="android.permission.BIND_AUTOFILL_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.autofill.AutofillService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.autofill"
+                android:resource="@xml/autofill_service_config" />
+        </service>
+
+        <service
+            android:name=".passkey.AranCredentialProviderService"
+            android:enabled="true"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher"
+            android:label="@string/credential_provider_label"
+            android:permission="android.permission.BIND_CREDENTIAL_PROVIDER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.credentials.CredentialProviderService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.credentials.provider"
+                android:resource="@xml/credential_provider_config" />
+        </service>
     </application>
 
 </manifest>

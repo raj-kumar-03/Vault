@@ -35,6 +35,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.example.data.VaultCryptoMetadata
@@ -42,6 +43,8 @@ import com.example.domain.model.AutoLockInterval
 import com.example.domain.model.ClipboardClearInterval
 import com.example.domain.model.SecuritySettings
 import com.example.domain.model.ThemePreference
+import com.example.security.BiometricAvailability
+import com.example.security.BiometricKeyState
 import com.example.ui.components.CategoryChip
 import com.example.ui.components.SettingsSection
 import com.example.ui.theme.VaultTheme
@@ -49,12 +52,19 @@ import com.example.ui.theme.VaultTheme
 @Composable
 fun SettingsScreen(
     settings: SecuritySettings,
+    biometricState: BiometricKeyState,
     cryptoMetadata: VaultCryptoMetadata,
     isCryptoBusy: Boolean,
+    isAutofillServiceEnabled: Boolean = false,
+    isPasskeyProviderSupported: Boolean = true,
     onAutoLockChange: (AutoLockInterval) -> Unit,
     onBiometricChange: (Boolean) -> Unit,
+    onAutoPromptBiometricChange: (Boolean) -> Unit = {},
     onClipboardClearChange: (ClipboardClearInterval) -> Unit,
     onHideAppPreviewChange: (Boolean) -> Unit,
+    onAllowInsecureHttpAutofillChange: (Boolean) -> Unit = {},
+    onOpenAutofillSystemSettings: () -> Unit = {},
+    onOpenPasskeySystemSettings: () -> Unit = {},
     onThemeChange: (ThemePreference) -> Unit,
     onChangeMasterPassword: (current: String, newPw: String, onResult: (Boolean) -> Unit) -> Unit,
     onRunKdfBenchmark: () -> Unit,
@@ -67,6 +77,15 @@ fun SettingsScreen(
     var showChangePasswordSheet by remember { mutableStateOf(false) }
     var showLicensesDialog by remember { mutableStateOf(false) }
     var showPrivacyDialog by remember { mutableStateOf(false) }
+
+    val (bioBadgeText, bioBadgeColor) = when {
+        biometricState.canUnlockWithBiometrics -> "Bound" to colors.primary
+        biometricState.availability == BiometricAvailability.READY -> "Ready" to colors.info
+        biometricState.availability == BiometricAvailability.KEY_INVALIDATED -> "Invalidated" to colors.warning
+        biometricState.availability == BiometricAvailability.NO_BIOMETRICS_ENROLLED -> "Not Enrolled" to colors.warning
+        biometricState.availability == BiometricAvailability.DEVICE_LOCK_NOT_SET -> "No Lock" to colors.danger
+        else -> "Unavailable" to colors.textSecondary
+    }
 
     Box(
         contentAlignment = Alignment.TopCenter,
@@ -91,7 +110,7 @@ fun SettingsScreen(
                         modifier = Modifier.testTag("settings_screen_title"),
                     )
                     Text(
-                        text = "Transparent controls distinguishing active prototype options from planned phases",
+                        text = "Android Keystore protection, monotonic auto-lock, and local-first controls",
                         style = MaterialTheme.typography.bodySmall,
                         color = colors.textSecondary,
                     )
@@ -100,8 +119,8 @@ fun SettingsScreen(
 
             item(key = "security_section") {
                 SettingsSection(
-                    title = "Security",
-                    subtitle = "Local vault session and clipboard preferences",
+                    title = "Platform Security & Authentication",
+                    subtitle = "Hardware-bound Keystore unlock, auto-lock lifecycle, and screen privacy",
                 ) {
                     Column(
                         verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -141,7 +160,7 @@ fun SettingsScreen(
                             }
                         }
                         Text(
-                            text = "Background timer enforcement ships with platform lifecycle integration in Phase 4.",
+                            text = "Active: enforced via monotonic clock across backgrounding, foreground inactivity, and process death.",
                             style = MaterialTheme.typography.bodySmall,
                             color = colors.textSecondary,
                         )
@@ -150,11 +169,27 @@ fun SettingsScreen(
                     HorizontalDivider(color = colors.outlineSubtle)
 
                     SettingsSwitchRow(
-                        title = "Biometric unlock affordance",
-                        subtitle = "Shows biometric prototype trigger on Unlock screen (Android Keystore binding in Phase 4)",
-                        checked = settings.biometricUnlockEnabled,
+                        title = "Android Keystore biometric unlock",
+                        subtitle = biometricState.statusMessage,
+                        checked = biometricState.canUnlockWithBiometrics,
+                        enabled = !isCryptoBusy && (biometricState.canEnrollBiometrics || biometricState.hasBoundEnvelope),
+                        badge = bioBadgeText,
+                        badgeColor = bioBadgeColor,
                         onCheckedChange = onBiometricChange,
                         testTag = "settings_biometric_switch",
+                    )
+
+                    HorizontalDivider(color = colors.outlineSubtle)
+
+                    SettingsSwitchRow(
+                        title = "Prompt fingerprint or face on app entry",
+                        subtitle = "Automatically invokes BiometricPrompt immediately when launching or resuming a locked vault",
+                        checked = settings.autoPromptBiometricOnLaunch,
+                        enabled = biometricState.canUnlockWithBiometrics,
+                        badge = if (biometricState.canUnlockWithBiometrics && settings.autoPromptBiometricOnLaunch) "Auto" else "Manual",
+                        badgeColor = if (biometricState.canUnlockWithBiometrics && settings.autoPromptBiometricOnLaunch) colors.primary else colors.textSecondary,
+                        onCheckedChange = onAutoPromptBiometricChange,
+                        testTag = "settings_biometric_autoprompt_switch",
                     )
 
                     HorizontalDivider(color = colors.outlineSubtle)
@@ -183,7 +218,7 @@ fun SettingsScreen(
                             }
                         }
                         Text(
-                            text = "Android OS and keyboard clipboards may keep history independently; clearing is best-effort only.",
+                            text = "Marks copied secrets as sensitive (Android 13+) and clears only matching secrets on timeout or lock. OS/keyboard clipboard histories remain outside app control.",
                             style = MaterialTheme.typography.bodySmall,
                             color = colors.textSecondary,
                         )
@@ -193,8 +228,11 @@ fun SettingsScreen(
 
                     SettingsSwitchRow(
                         title = "Hide app switcher preview (FLAG_SECURE)",
-                        subtitle = "Blocks screenshots and hides recent-apps thumbnails when enabled",
+                        subtitle = "Active: blocks screenshots, screen recordings, and recent-apps thumbnails",
                         checked = settings.hideAppPreviewEnabled,
+                        enabled = true,
+                        badge = if (settings.hideAppPreviewEnabled) "Protected" else "Off",
+                        badgeColor = if (settings.hideAppPreviewEnabled) colors.primary else colors.warning,
                         onCheckedChange = onHideAppPreviewChange,
                         testTag = "settings_flag_secure_switch",
                     )
@@ -215,6 +253,7 @@ fun SettingsScreen(
                         title = "Cryptographic engine (Format v${cryptoMetadata.formatVersion})",
                         subtitle = "${cryptoMetadata.kdfSummary} • AES-256-GCM + AAD • ${cryptoMetadata.encryptedRecordCount} encrypted records",
                         badge = "Active",
+                        badgeColor = colors.primary,
                     )
 
                     HorizontalDivider(color = colors.outlineSubtle)
@@ -235,7 +274,7 @@ fun SettingsScreen(
 
                     SettingsActionRow(
                         title = "Lock vault now",
-                        subtitle = "Wipes VEK from memory and returns to Unlock screen",
+                        subtitle = "Wipes VEK from memory, clears matching secret clipboard, and returns to Unlock",
                         badge = null,
                         onClick = onLockVaultNow,
                         testTag = "settings_lock_now_row",
@@ -246,18 +285,41 @@ fun SettingsScreen(
             item(key = "autofill_section") {
                 SettingsSection(
                     title = "Autofill & Offline Passkeys",
-                    subtitle = "Android system autofill and Credential Provider integration",
+                    subtitle = "Strict origin matching, APK signature verification, and Android 14+ FIDO2 ES256 passkeys",
                 ) {
-                    SettingsInfoRow(
+                    SettingsActionRow(
                         title = "Android AutofillService",
-                        subtitle = "Strict origin & app-signature matching without cross-origin leakage.",
-                        badge = "Coming in Phase 5",
+                        subtitle = if (isAutofillServiceEnabled) {
+                            "Active as system autofill provider • Strict HTTPS host & APK SHA-256 verification"
+                        } else {
+                            "Tap to select Aran as your Android autofill service in System Settings"
+                        },
+                        badge = if (isAutofillServiceEnabled) "Active" else "Enable",
+                        onClick = onOpenAutofillSystemSettings,
+                        testTag = "settings_autofill_row",
                     )
                     HorizontalDivider(color = colors.outlineSubtle)
-                    SettingsInfoRow(
+                    SettingsSwitchRow(
+                        title = "Block insecure HTTP autofill",
+                        subtitle = "Refuses autofill on plaintext http:// websites by default to prevent credential interception",
+                        checked = !settings.allowInsecureHttpAutofill,
+                        enabled = true,
+                        badge = if (!settings.allowInsecureHttpAutofill) "Protected" else "Exception",
+                        badgeColor = if (!settings.allowInsecureHttpAutofill) colors.primary else colors.warning,
+                        onCheckedChange = { blockHttp -> onAllowInsecureHttpAutofillChange(!blockHttp) },
+                        testTag = "settings_block_http_autofill_switch",
+                    )
+                    HorizontalDivider(color = colors.outlineSubtle)
+                    SettingsActionRow(
                         title = "Offline Android Passkey Provider (API 34+)",
-                        subtitle = "Native FIDO2 / WebAuthn CredentialProviderService storing ECDSA P-256 private keys encrypted inside your local AES-256-GCM vault.",
-                        badge = "Coming in Phase 5",
+                        subtitle = if (isPasskeyProviderSupported) {
+                            "Registered CredentialProviderService • ECDSA P-256 (ES256) keys encrypted inside local AES-256-GCM vault"
+                        } else {
+                            "Requires Android 14 (API 34) or higher for system Credential Manager passkeys"
+                        },
+                        badge = if (isPasskeyProviderSupported) "Ready" else "API 34+",
+                        onClick = onOpenPasskeySystemSettings,
+                        testTag = "settings_passkey_provider_row",
                     )
                 }
             }
@@ -332,13 +394,14 @@ fun SettingsScreen(
                 ) {
                     SettingsInfoRow(
                         title = "Aran Android",
-                        subtitle = "Version 0.3.0-phase3 • Encrypted SQLite + Argon2id + AES-256-GCM + .svbk backups",
-                        badge = "Phase 3",
+                        subtitle = "Version 0.5.0-phase5 • Native SQLite + Argon2id + Keystore Biometrics + Autofill + Offline Passkeys",
+                        badge = "Phase 5",
+                        badgeColor = colors.primary,
                     )
                     HorizontalDivider(color = colors.outlineSubtle)
                     SettingsActionRow(
                         title = "Privacy Statement",
-                        subtitle = "Zero accounts, zero telemetry, zero remote servers",
+                        subtitle = "Zero accounts, zero telemetry, zero cloud backup, zero remote servers",
                         badge = null,
                         onClick = { showPrivacyDialog = true },
                         testTag = "settings_privacy_row",
@@ -346,7 +409,7 @@ fun SettingsScreen(
                     HorizontalDivider(color = colors.outlineSubtle)
                     SettingsActionRow(
                         title = "Open-Source Licenses",
-                        subtitle = "Kotlin, Jetpack Compose, Bouncy Castle (MIT), Plus Jakarta Sans, JetBrains Mono",
+                        subtitle = "Kotlin, Jetpack Compose, AndroidX Biometric, Bouncy Castle (MIT), Plus Jakarta Sans, JetBrains Mono",
                         badge = null,
                         onClick = { showLicensesDialog = true },
                         testTag = "settings_licenses_row",
@@ -388,7 +451,7 @@ fun SettingsScreen(
             text = {
                 Text(
                     "Aran does not connect to any cloud backend, analytics provider, crash reporter, or third-party API.\n\n" +
-                        "Phase 3 Local Storage Notice: Vault headers and AES-256-GCM encrypted records persist strictly on-device in local SQLite, with versioned .svbk encrypted backup/restore. Hardware Keystore biometric binding and screen-capture defaults harden further in Phase 4."
+                        "Phase 5 Security Hardening: Vault records and FIDO2/WebAuthn ES256 passkey private keys persist strictly on-device in AES-256-GCM encrypted SQLite (with OS Auto Backup disabled). Entry-point BiometricPrompt wraps your VEK inside Android Keystore, and Autofill strictly enforces HTTPS origin and APK SHA-256 verification."
                 )
             },
             confirmButton = {
@@ -410,7 +473,8 @@ fun SettingsScreen(
             text = {
                 Text(
                     "• Kotlin & Kotlinx Coroutines (Apache 2.0)\n" +
-                        "• AndroidX Jetpack Compose, Navigation, Room & Material 3 (Apache 2.0)\n" +
+                        "• AndroidX Jetpack Compose, Navigation, Biometric, Credentials & Material 3 (Apache 2.0)\n" +
+                        "• Native Android SQLiteOpenHelper, AutofillService & Android Keystore Platform APIs\n" +
                         "• Bouncy Castle Crypto Provider — Argon2id & HKDF (MIT License)\n" +
                         "• Plus Jakarta Sans Font (SIL Open Font License 1.1)\n" +
                         "• JetBrains Mono Font (SIL Open Font License 1.1)"
@@ -430,6 +494,9 @@ private fun SettingsSwitchRow(
     title: String,
     subtitle: String,
     checked: Boolean,
+    enabled: Boolean,
+    badge: String?,
+    badgeColor: Color,
     onCheckedChange: (Boolean) -> Unit,
     testTag: String,
 ) {
@@ -445,13 +512,32 @@ private fun SettingsSwitchRow(
             modifier = Modifier
                 .weight(1f)
                 .padding(end = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(2.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleSmall,
-                color = colors.textPrimary,
-            )
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = colors.textPrimary,
+                )
+                if (badge != null) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(999.dp))
+                            .background(colors.surfaceElevated)
+                            .padding(horizontal = 8.dp, vertical = 2.dp),
+                    ) {
+                        Text(
+                            text = badge,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = badgeColor,
+                        )
+                    }
+                }
+            }
             Text(
                 text = subtitle,
                 style = MaterialTheme.typography.bodySmall,
@@ -460,6 +546,7 @@ private fun SettingsSwitchRow(
         }
         Switch(
             checked = checked,
+            enabled = enabled,
             onCheckedChange = onCheckedChange,
             colors = SwitchDefaults.colors(
                 checkedThumbColor = colors.onPrimary,
@@ -477,6 +564,7 @@ private fun SettingsInfoRow(
     title: String,
     subtitle: String,
     badge: String,
+    badgeColor: Color,
 ) {
     val colors = VaultTheme.colors
     Row(
@@ -512,7 +600,7 @@ private fun SettingsInfoRow(
             Text(
                 text = badge,
                 style = MaterialTheme.typography.labelSmall,
-                color = colors.warning,
+                color = badgeColor,
             )
         }
     }

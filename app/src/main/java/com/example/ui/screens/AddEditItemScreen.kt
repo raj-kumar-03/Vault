@@ -78,20 +78,21 @@ fun AddEditItemScreen(
     var username by rememberSaveable(existingItem?.id) {
         mutableStateOf(existingItem?.username ?: "")
     }
-    var secret by rememberSaveable(existingItem?.id, initialGeneratedPassword) {
+    // Volatile remember ensures credential secrets and notes never serialize into savedInstanceState Bundles.
+    var secret by remember(existingItem?.id, initialGeneratedPassword) {
         mutableStateOf(existingItem?.secret ?: initialGeneratedPassword.orEmpty())
     }
-    var revealSecret by rememberSaveable { mutableStateOf(false) }
+    var revealSecret by remember { mutableStateOf(false) }
     var website by rememberSaveable(existingItem?.id) {
         mutableStateOf(existingItem?.website ?: "")
     }
-    var notes by rememberSaveable(existingItem?.id) {
+    var notes by remember(existingItem?.id) {
         mutableStateOf(existingItem?.notes ?: "")
     }
     var isFavorite by rememberSaveable(existingItem?.id) {
         mutableStateOf(existingItem?.isFavorite ?: false)
     }
-    var validationError by rememberSaveable { mutableStateOf<String?>(null) }
+    var validationError by remember { mutableStateOf<String?>(null) }
 
     val domainPreview = remember(website) { PasswordEngine.normalizeDomain(website) }
 

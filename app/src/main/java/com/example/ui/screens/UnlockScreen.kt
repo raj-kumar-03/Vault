@@ -22,6 +22,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -29,10 +30,10 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -47,6 +48,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.example.R
 import com.example.data.PersistentVaultRepository
+import com.example.security.BiometricAvailability
+import com.example.security.BiometricKeyState
+import com.example.security.LockReason
 import com.example.ui.components.AranIcons
 import com.example.ui.components.InlineError
 import com.example.ui.components.PrimaryButton
@@ -57,21 +61,35 @@ import com.example.ui.theme.VaultTheme
 
 @Composable
 fun UnlockScreen(
-    biometricEnabled: Boolean,
+    biometricState: BiometricKeyState,
+    lockReason: LockReason,
     isBusy: Boolean,
+    autoPromptBiometricOnLaunch: Boolean = true,
     onUnlockWithPassword: (candidate: String, onResult: (Boolean) -> Unit) -> Unit,
-    onUnlockWithBiometric: (onResult: (Boolean) -> Unit) -> Unit,
+    onUnlockWithBiometric: (onError: (String) -> Unit) -> Unit,
     onRecoverWithKey: (recoveryKey: String, newMasterPassword: String, onResult: (Boolean) -> Unit) -> Unit,
     onReturnToWelcome: () -> Unit,
 ) {
     val colors = VaultTheme.colors
-    var password by rememberSaveable { mutableStateOf("") }
-    var revealed by rememberSaveable { mutableStateOf(false) }
-    var errorMessage by rememberSaveable { mutableStateOf<String?>(null) }
+    // Deliberately use volatile remember (NOT rememberSaveable) so master passwords never serialize to Bundle.
+    var password by remember { mutableStateOf("") }
+    var revealed by remember { mutableStateOf(false) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
     var showRecoverSheet by remember { mutableStateOf(false) }
+    var autoPromptedForCurrentLock by remember(lockReason) { mutableStateOf(false) }
 
     val genericError = stringResource(R.string.error_unlock_generic)
     val bioDesc = stringResource(R.string.cd_biometric_unlock)
+    val showBiometricAffordance = biometricState.canUnlockWithBiometrics
+
+    // Automatically invoke BiometricPrompt (Fingerprint or Class 3 Face Unlock bound to Android Keystore
+    // CryptoObject) on entry when the vault is locked and biometric unlock is bound.
+    LaunchedEffect(showBiometricAffordance, autoPromptBiometricOnLaunch, lockReason) {
+        if (showBiometricAffordance && autoPromptBiometricOnLaunch && !autoPromptedForCurrentLock && !isBusy) {
+            autoPromptedForCurrentLock = true
+            onUnlockWithBiometric { msg -> errorMessage = msg }
+        }
+    }
 
     fun submitUnlock() {
         if (isBusy) return
@@ -116,18 +134,19 @@ fun UnlockScreen(
         ) {
             Box(
                 modifier = Modifier
-                    .clip(RoundedCornerShape(10.dp))
+                    .clip(RoundedCornerShape(999.dp))
                     .background(colors.surfaceElevated)
-                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                    .padding(horizontal = 14.dp, vertical = 6.dp)
+                    .testTag("unlock_lock_reason_badge"),
             ) {
                 Text(
-                    text = "Vault Locked • VEK Wiped From Memory",
+                    text = lockReason.bannerMessage ?: "Vault Locked • VEK Wiped From Memory",
                     style = MaterialTheme.typography.labelSmall,
                     color = colors.primary,
                 )
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(6.dp))
 
             ShieldEmblem(size = 76.dp, locked = true)
 
@@ -139,8 +158,8 @@ fun UnlockScreen(
             )
 
             Text(
-                text = if (biometricEnabled) {
-                    "Enter your master password to derive your Argon2id key, or use the biometric prototype."
+                text = if (showBiometricAffordance) {
+                    "Verify with fingerprint or face unlock, or enter your master password to access the vault."
                 } else {
                     "Enter your master password to unwrap your Vault Encryption Key."
                 },
@@ -149,7 +168,36 @@ fun UnlockScreen(
                 textAlign = TextAlign.Center,
             )
 
-            if (biometricEnabled) {
+            if (biometricState.availability == BiometricAvailability.KEY_INVALIDATED) {
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = colors.warningContainer,
+                    border = BorderStroke(1.dp, colors.warning.copy(alpha = 0.55f)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("unlock_biometric_invalidated_banner"),
+                ) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.Top,
+                        modifier = Modifier.padding(14.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Warning,
+                            contentDescription = null,
+                            tint = colors.warning,
+                            modifier = Modifier.size(20.dp),
+                        )
+                        Text(
+                            text = biometricState.statusMessage,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = colors.textPrimary,
+                        )
+                    }
+                }
+            }
+
+            if (showBiometricAffordance) {
                 Spacer(modifier = Modifier.height(4.dp))
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
@@ -158,13 +206,14 @@ fun UnlockScreen(
                     Surface(
                         shape = CircleShape,
                         color = colors.surfaceElevated,
-                        border = BorderStroke(1.dp, colors.primary.copy(alpha = 0.45f)),
+                        border = BorderStroke(1.5.dp, colors.primary.copy(alpha = 0.65f)),
                         modifier = Modifier
                             .size(72.dp)
                             .clip(CircleShape)
                             .clickable(enabled = !isBusy) {
-                                onUnlockWithBiometric { ok ->
-                                    if (!ok) errorMessage = genericError
+                                errorMessage = null
+                                onUnlockWithBiometric { msg ->
+                                    errorMessage = msg
                                 }
                             }
                             .semantics { contentDescription = bioDesc }
@@ -180,7 +229,7 @@ fun UnlockScreen(
                         }
                     }
                     Text(
-                        text = "Biometric prototype (hardware Keystore binding in Phase 4)",
+                        text = "Fingerprint or Face Unlock • Keystore CryptoObject",
                         style = MaterialTheme.typography.labelSmall,
                         color = colors.textSecondary,
                     )
@@ -234,7 +283,7 @@ fun UnlockScreen(
             )
 
             Surface(
-                shape = RoundedCornerShape(12.dp),
+                shape = RoundedCornerShape(14.dp),
                 color = colors.surface,
                 border = BorderStroke(1.dp, colors.outlineSubtle),
                 modifier = Modifier.fillMaxWidth(),
@@ -244,7 +293,7 @@ fun UnlockScreen(
                     modifier = Modifier.padding(12.dp),
                 ) {
                     Text(
-                        text = "Phase 3 local SQLite hint",
+                        text = "Local encrypted SQLite vault hint",
                         style = MaterialTheme.typography.labelSmall,
                         color = colors.textSecondary,
                     )

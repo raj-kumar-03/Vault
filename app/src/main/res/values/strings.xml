@@ -1,7 +1,12 @@
 <resources>
     <string name="app_name">Aran</string>
     <string name="tagline">Keep Your Passwords Fully Protected</string>
-    <string name="phase_one_badge">Phase 3 • Encrypted Local SQLite Vault</string>
+    <string name="phase_one_badge">Phase 5 • Autofill &amp; Offline Passkeys</string>
+    <string name="autofill_service_label">Aran Autofill</string>
+    <string name="autofill_auth_title">Unlock Aran Autofill</string>
+    <string name="credential_provider_label">Aran Offline Passkeys</string>
+    <string name="credential_provider_subtitle">Offline AES-256-GCM vault &amp; FIDO2 passkeys</string>
+    <string name="passkey_auth_title">Aran Passkey Verification</string>
     <string name="nav_vault">Vault</string>
     <string name="nav_generator">Generator</string>
     <string name="nav_devices">Devices</string>
@@ -13,7 +18,7 @@
     <string name="cd_toggle_visibility">Toggle secret visibility</string>
     <string name="cd_copy_value">Copy value</string>
     <string name="cd_favorite_toggle">Toggle favorite</string>
-    <string name="cd_biometric_unlock">Unlock with biometrics</string>
+    <string name="cd_biometric_unlock">Unlock with fingerprint or face</string>
     <string name="cd_add_item">Add vault item</string>
     <string name="error_unlock_generic">Unable to unlock vault. Check your master password and try again.</string>
 </resources>

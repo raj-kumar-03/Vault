@@ -36,6 +36,23 @@ class VaultSessionKey internal constructor(
         wiped = true
         vekBytes.fill(0)
     }
+
+    companion object {
+        internal fun fromUnwrappedVek(
+            vaultId: String,
+            formatVersion: Int,
+            vekBytes: ByteArray,
+        ): VaultSessionKey {
+            require(vekBytes.size == VaultFormatConstants.AES_KEY_BYTES) {
+                "Unwrapped VEK must be ${VaultFormatConstants.AES_KEY_BYTES} bytes."
+            }
+            return VaultSessionKey(
+                vaultId = vaultId,
+                formatVersion = formatVersion,
+                vekBytes = vekBytes.copyOf(),
+            )
+        }
+    }
 }
 
 data class CreatedVaultBundle(

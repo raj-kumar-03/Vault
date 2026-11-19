@@ -1,6 +1,7 @@
 package com.example.ui.state
 
 import android.content.Context
+import android.os.SystemClock
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -9,7 +10,7 @@ import com.example.crypto.VaultBackupCodec
 import com.example.crypto.VaultCryptoException
 import com.example.data.PersistentVaultRepository
 import com.example.data.VaultCryptoMetadata
-import com.example.data.local.VaultDatabase
+import com.example.data.VaultRuntime
 import com.example.domain.model.AutoLockInterval
 import com.example.domain.model.ClipboardClearInterval
 import com.example.domain.model.GeneratorConfig
@@ -22,6 +23,10 @@ import com.example.domain.model.ThemePreference
 import com.example.domain.model.VaultCategoryFilter
 import com.example.domain.model.VaultItem
 import com.example.domain.model.VaultItemType
+import com.example.security.BiometricKeyState
+import com.example.security.CipherPreparationResult
+import com.example.security.LockReason
+import com.example.security.VaultAutoLockPolicy
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -29,6 +34,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import javax.crypto.Cipher
 
 data class GeneratorUiState(
     val config: GeneratorConfig = GeneratorConfig(),
@@ -46,6 +52,8 @@ data class VaultUiState(
     val hasVault: Boolean = false,
     val isUnlocked: Boolean = false,
     val isCryptoBusy: Boolean = false,
+    val lockReason: LockReason = LockReason.NONE,
+    val biometricState: BiometricKeyState = BiometricKeyState(),
     val pendingRecoveryKeyReveal: String? = null,
     val pendingBackupRestore: PendingBackupRestore? = null,
     val cryptoMetadata: VaultCryptoMetadata = VaultCryptoMetadata(),
@@ -54,7 +62,7 @@ data class VaultUiState(
     val selectedCategory: VaultCategoryFilter = VaultCategoryFilter.ALL,
     val selectedItemId: String? = null,
     val devices: List<PairedDevice> = emptyList(),
-    val settings: SecuritySettings = SecuritySettings(),
+    val settings: SecuritySettings = SecuritySettings(biometricUnlockEnabled = false),
     val generator: GeneratorUiState = GeneratorUiState(),
     val pendingGeneratedPasswordForEditor: String? = null,
 ) {
@@ -97,7 +105,10 @@ data class VaultUiState(
 
 class VaultViewModel(
     private val repository: PersistentVaultRepository,
+    elapsedClockMs: () -> Long = { SystemClock.elapsedRealtime() },
 ) : ViewModel() {
+
+    private val autoLockPolicy = VaultAutoLockPolicy(elapsedClockMs)
 
     private val searchQueryFlow = MutableStateFlow("")
     private val selectedCategoryFlow = MutableStateFlow(VaultCategoryFilter.ALL)
@@ -106,6 +117,7 @@ class VaultViewModel(
     private val isCryptoBusyFlow = MutableStateFlow(false)
     private val pendingRecoveryKeyFlow = MutableStateFlow<String?>(null)
     private val pendingBackupRestoreFlow = MutableStateFlow<PendingBackupRestore?>(null)
+    private val lockReasonFlow = MutableStateFlow(LockReason.COLD_START)
 
     private val initialConfig = GeneratorConfig()
     private val generatorFlow = MutableStateFlow(
@@ -126,14 +138,21 @@ class VaultViewModel(
         RepoBundle(initialized, hasVault, isUnlocked, items, devices)
     }
 
-    private val cryptoAndSettingsFlow = combine(
+    private val securityStateFlow = combine(
         repository.settings,
         repository.cryptoMetadata,
+        repository.biometricState,
+        lockReasonFlow,
+    ) { settings, meta, bioState, lockReason ->
+        SecurityBundle(settings, meta, bioState, lockReason)
+    }
+
+    private val transientFlow = combine(
         isCryptoBusyFlow,
         pendingRecoveryKeyFlow,
         pendingBackupRestoreFlow,
-    ) { settings, meta, busy, recoveryKey, pendingBackup ->
-        CryptoBundle(settings, meta, busy, recoveryKey, pendingBackup)
+    ) { busy, recoveryKey, pendingBackup ->
+        TransientBundle(busy, recoveryKey, pendingBackup)
     }
 
     private val uiFilters = combine(
@@ -148,23 +167,26 @@ class VaultViewModel(
 
     val uiState: StateFlow<VaultUiState> = combine(
         repoState,
-        cryptoAndSettingsFlow,
+        securityStateFlow,
+        transientFlow,
         uiFilters,
-    ) { repo, crypto, filters ->
+    ) { repo, sec, transient, filters ->
         VaultUiState(
             isStorageInitialized = repo.isInitialized,
             hasVault = repo.hasVault,
             isUnlocked = repo.isUnlocked,
-            isCryptoBusy = crypto.isBusy,
-            pendingRecoveryKeyReveal = crypto.pendingRecoveryKey,
-            pendingBackupRestore = crypto.pendingBackup,
-            cryptoMetadata = crypto.metadata,
+            isCryptoBusy = transient.isBusy,
+            lockReason = sec.lockReason,
+            biometricState = sec.biometricState,
+            pendingRecoveryKeyReveal = transient.pendingRecoveryKey,
+            pendingBackupRestore = transient.pendingBackup,
+            cryptoMetadata = sec.metadata,
             items = repo.items,
             searchQuery = filters.query,
             selectedCategory = filters.category,
             selectedItemId = filters.selectedItemId ?: repo.items.firstOrNull()?.id,
             devices = repo.devices,
-            settings = crypto.settings,
+            settings = sec.settings,
             generator = filters.generator,
             pendingGeneratedPasswordForEditor = filters.pendingPassword,
         )
@@ -175,6 +197,8 @@ class VaultViewModel(
             isStorageInitialized = repository.isStorageInitialized.value,
             hasVault = repository.hasVault.value,
             isUnlocked = repository.isUnlocked.value,
+            lockReason = lockReasonFlow.value,
+            biometricState = repository.biometricState.value,
             cryptoMetadata = repository.cryptoMetadata.value,
             items = repository.items.value,
             selectedItemId = repository.items.value.firstOrNull()?.id,
@@ -184,12 +208,130 @@ class VaultViewModel(
         ),
     )
 
+    fun onAppBackgrounded(): Boolean {
+        if (!repository.isUnlocked.value) return false
+        val interval = repository.settings.value.autoLockInterval
+        val lockNow = autoLockPolicy.onAppBackgrounded(interval)
+        if (lockNow) {
+            lockVault(LockReason.AUTO_LOCK_BACKGROUND)
+        }
+        return lockNow
+    }
+
+    fun onAppForegrounded(): Boolean {
+        viewModelScope.launch { repository.refreshBiometricState() }
+        if (!repository.isUnlocked.value) return false
+        val interval = repository.settings.value.autoLockInterval
+        if (autoLockPolicy.shouldLockOnForeground(interval)) {
+            lockVault(LockReason.AUTO_LOCK_BACKGROUND)
+            return true
+        }
+        autoLockPolicy.resetActivity()
+        return false
+    }
+
+    fun onUserInteraction() {
+        if (repository.isUnlocked.value) {
+            autoLockPolicy.resetActivity()
+        }
+    }
+
+    fun checkInactivityTimeout(): Boolean {
+        if (!repository.isUnlocked.value) return false
+        val interval = repository.settings.value.autoLockInterval
+        if (autoLockPolicy.shouldLockForInactivity(interval)) {
+            lockVault(LockReason.AUTO_LOCK_INACTIVITY)
+            return true
+        }
+        return false
+    }
+
+    fun refreshBiometricState() {
+        viewModelScope.launch { repository.refreshBiometricState() }
+    }
+
+    fun prepareBiometricEnrollment(
+        onCipherReady: (Cipher) -> Unit,
+        onError: (String) -> Unit,
+    ) {
+        viewModelScope.launch {
+            when (val prep = repository.prepareBiometricEnrollmentCipher()) {
+                is CipherPreparationResult.Ready -> onCipherReady(prep.cipher)
+                is CipherPreparationResult.KeyInvalidated -> {
+                    onError("Previous biometric key was invalidated. Try enabling again after checking device biometrics.")
+                }
+                is CipherPreparationResult.Unavailable -> onError(prep.reason)
+            }
+        }
+    }
+
+    fun completeBiometricEnrollment(
+        authenticatedCipher: Cipher,
+        onResult: (Boolean) -> Unit,
+    ) {
+        viewModelScope.launch {
+            isCryptoBusyFlow.value = true
+            try {
+                val ok = repository.completeBiometricEnrollment(authenticatedCipher)
+                onResult(ok)
+            } finally {
+                isCryptoBusyFlow.value = false
+            }
+        }
+    }
+
+    fun disableBiometricUnlock(onDone: () -> Unit = {}) {
+        viewModelScope.launch {
+            repository.disableBiometricUnlock()
+            onDone()
+        }
+    }
+
+    fun prepareBiometricUnlock(
+        onCipherReady: (Cipher) -> Unit,
+        onInvalidated: (String) -> Unit,
+        onError: (String) -> Unit,
+    ) {
+        viewModelScope.launch {
+            when (val prep = repository.prepareBiometricUnlockCipher()) {
+                is CipherPreparationResult.Ready -> onCipherReady(prep.cipher)
+                is CipherPreparationResult.KeyInvalidated -> {
+                    onInvalidated(
+                        "Biometric enrollment or device lock changed. Keystore key invalidated—unlock with your master password to re-enable."
+                    )
+                }
+                is CipherPreparationResult.Unavailable -> onError(prep.reason)
+            }
+        }
+    }
+
+    fun completeBiometricUnlock(
+        authenticatedCipher: Cipher,
+        onResult: (Boolean) -> Unit,
+    ) {
+        viewModelScope.launch {
+            isCryptoBusyFlow.value = true
+            try {
+                val ok = repository.completeBiometricUnlock(authenticatedCipher)
+                if (ok) {
+                    lockReasonFlow.value = LockReason.NONE
+                    autoLockPolicy.resetActivity()
+                }
+                onResult(ok)
+            } finally {
+                isCryptoBusyFlow.value = false
+            }
+        }
+    }
+
     fun createVault(masterPassword: String, onCreated: () -> Unit) {
         viewModelScope.launch {
             isCryptoBusyFlow.value = true
             try {
                 val recoveryKey = repository.createVault(masterPassword.toCharArray())
                 pendingRecoveryKeyFlow.value = recoveryKey
+                lockReasonFlow.value = LockReason.NONE
+                autoLockPolicy.resetActivity()
                 onCreated()
             } finally {
                 isCryptoBusyFlow.value = false
@@ -202,6 +344,8 @@ class VaultViewModel(
             isCryptoBusyFlow.value = true
             try {
                 repository.openDemoVault()
+                lockReasonFlow.value = LockReason.NONE
+                autoLockPolicy.resetActivity()
                 onOpened()
             } finally {
                 isCryptoBusyFlow.value = false
@@ -218,18 +362,10 @@ class VaultViewModel(
             isCryptoBusyFlow.value = true
             try {
                 val ok = repository.unlockWithMasterPassword(candidate.toCharArray())
-                onResult(ok)
-            } finally {
-                isCryptoBusyFlow.value = false
-            }
-        }
-    }
-
-    fun attemptBiometricUnlock(onResult: (Boolean) -> Unit) {
-        viewModelScope.launch {
-            isCryptoBusyFlow.value = true
-            try {
-                val ok = repository.unlockWithMockBiometric()
+                if (ok) {
+                    lockReasonFlow.value = LockReason.NONE
+                    autoLockPolicy.resetActivity()
+                }
                 onResult(ok)
             } finally {
                 isCryptoBusyFlow.value = false
@@ -268,6 +404,10 @@ class VaultViewModel(
                     recoveryKey = recoveryKey,
                     newMasterPassword = newMasterPassword.toCharArray(),
                 )
+                if (ok) {
+                    lockReasonFlow.value = LockReason.NONE
+                    autoLockPolicy.resetActivity()
+                }
                 onResult(ok)
             } finally {
                 isCryptoBusyFlow.value = false
@@ -325,7 +465,11 @@ class VaultViewModel(
                     backupBytes = pending.rawBytes,
                     masterPassword = masterPassword.toCharArray(),
                 )
-                if (ok) pendingBackupRestoreFlow.value = null
+                if (ok) {
+                    pendingBackupRestoreFlow.value = null
+                    lockReasonFlow.value = LockReason.NONE
+                    autoLockPolicy.resetActivity()
+                }
                 onResult(ok)
             } finally {
                 isCryptoBusyFlow.value = false
@@ -350,7 +494,11 @@ class VaultViewModel(
                     recoveryKey = recoveryKey,
                     newMasterPassword = newMasterPassword.toCharArray(),
                 )
-                if (ok) pendingBackupRestoreFlow.value = null
+                if (ok) {
+                    pendingBackupRestoreFlow.value = null
+                    lockReasonFlow.value = LockReason.NONE
+                    autoLockPolicy.resetActivity()
+                }
                 onResult(ok)
             } finally {
                 isCryptoBusyFlow.value = false
@@ -370,8 +518,10 @@ class VaultViewModel(
         }
     }
 
-    fun lockVault() {
+    fun lockVault(reason: LockReason = LockReason.MANUAL) {
         pendingRecoveryKeyFlow.value = null
+        pendingGeneratedPasswordFlow.value = null
+        lockReasonFlow.value = reason
         repository.lockVault()
     }
 
@@ -468,16 +618,20 @@ class VaultViewModel(
         viewModelScope.launch { repository.updateSettings { it.copy(autoLockInterval = interval) } }
     }
 
-    fun updateBiometricUnlock(enabled: Boolean) {
-        viewModelScope.launch { repository.updateSettings { it.copy(biometricUnlockEnabled = enabled) } }
-    }
-
     fun updateClipboardClear(interval: ClipboardClearInterval) {
         viewModelScope.launch { repository.updateSettings { it.copy(clipboardClearInterval = interval) } }
     }
 
     fun updateHideAppPreview(enabled: Boolean) {
         viewModelScope.launch { repository.updateSettings { it.copy(hideAppPreviewEnabled = enabled) } }
+    }
+
+    fun updateAutoPromptBiometricOnLaunch(enabled: Boolean) {
+        viewModelScope.launch { repository.updateSettings { it.copy(autoPromptBiometricOnLaunch = enabled) } }
+    }
+
+    fun updateAllowInsecureHttpAutofill(allowed: Boolean) {
+        viewModelScope.launch { repository.updateSettings { it.copy(allowInsecureHttpAutofill = allowed) } }
     }
 
     fun updateThemePreference(preference: ThemePreference) {
@@ -492,9 +646,14 @@ class VaultViewModel(
         val devices: List<PairedDevice>,
     )
 
-    private data class CryptoBundle(
+    private data class SecurityBundle(
         val settings: SecuritySettings,
         val metadata: VaultCryptoMetadata,
+        val biometricState: BiometricKeyState,
+        val lockReason: LockReason,
+    )
+
+    private data class TransientBundle(
         val isBusy: Boolean,
         val pendingRecoveryKey: String?,
         val pendingBackup: PendingBackupRestore?,
@@ -512,8 +671,9 @@ class VaultViewModel(
         fun factory(context: Context): ViewModelProvider.Factory = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T {
-                val db = VaultDatabase.getInstance(context.applicationContext)
-                return VaultViewModel(PersistentVaultRepository(db.vaultDao())) as T
+                return VaultViewModel(
+                    repository = VaultRuntime.getRepository(context.applicationContext),
+                ) as T
             }
         }
     }

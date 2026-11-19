@@ -1,8 +1,5 @@
 package com.example.data.local
 
-import androidx.room.ColumnInfo
-import androidx.room.Entity
-import androidx.room.PrimaryKey
 import com.example.crypto.EncryptedPayload
 import com.example.crypto.EncryptedVaultRecord
 import com.example.crypto.KdfParameters
@@ -13,42 +10,23 @@ import com.example.domain.model.SecuritySettings
 import com.example.domain.model.ThemePreference
 import com.example.domain.model.VaultItemType
 
-@Entity(tableName = "vault_headers")
 data class VaultHeaderEntity(
-    @PrimaryKey
-    @ColumnInfo(name = "singleton_id")
     val singletonId: Int = 0,
-    @ColumnInfo(name = "format_version")
     val formatVersion: Int,
-    @ColumnInfo(name = "vault_id")
     val vaultId: String,
-    @ColumnInfo(name = "kdf_memory_kib")
     val kdfMemoryKiB: Int,
-    @ColumnInfo(name = "kdf_iterations")
     val kdfIterations: Int,
-    @ColumnInfo(name = "kdf_parallelism")
     val kdfParallelism: Int,
-    @ColumnInfo(name = "kdf_salt_length")
     val kdfSaltLength: Int,
-    @ColumnInfo(name = "kdf_hash_length")
     val kdfHashLength: Int,
-    @ColumnInfo(name = "master_salt", typeAffinity = ColumnInfo.BLOB)
     val masterSalt: ByteArray,
-    @ColumnInfo(name = "master_wrap_nonce", typeAffinity = ColumnInfo.BLOB)
     val masterWrapNonce: ByteArray,
-    @ColumnInfo(name = "master_wrap_ciphertext", typeAffinity = ColumnInfo.BLOB)
     val masterWrapCiphertext: ByteArray,
-    @ColumnInfo(name = "recovery_salt", typeAffinity = ColumnInfo.BLOB)
     val recoverySalt: ByteArray,
-    @ColumnInfo(name = "recovery_wrap_nonce", typeAffinity = ColumnInfo.BLOB)
     val recoveryWrapNonce: ByteArray,
-    @ColumnInfo(name = "recovery_wrap_ciphertext", typeAffinity = ColumnInfo.BLOB)
     val recoveryWrapCiphertext: ByteArray,
-    @ColumnInfo(name = "key_rotation_epoch")
     val keyRotationEpoch: Int,
-    @ColumnInfo(name = "created_at_epoch_ms")
     val createdAtEpochMs: Long,
-    @ColumnInfo(name = "updated_at_epoch_ms")
     val updatedAtEpochMs: Long,
 ) {
     fun toDomain(): VaultHeader = VaultHeader(
@@ -99,26 +77,15 @@ data class VaultHeaderEntity(
     }
 }
 
-@Entity(tableName = "vault_records")
 data class VaultRecordEntity(
-    @PrimaryKey
-    @ColumnInfo(name = "record_id")
     val recordId: String,
-    @ColumnInfo(name = "vault_id")
     val vaultId: String,
-    @ColumnInfo(name = "format_version")
     val formatVersion: Int,
-    @ColumnInfo(name = "record_type")
     val recordType: String,
-    @ColumnInfo(name = "nonce", typeAffinity = ColumnInfo.BLOB)
     val nonce: ByteArray,
-    @ColumnInfo(name = "ciphertext_and_tag", typeAffinity = ColumnInfo.BLOB)
     val ciphertextAndTag: ByteArray,
-    @ColumnInfo(name = "updated_at_epoch_ms")
     val updatedAtEpochMs: Long,
-    @ColumnInfo(name = "is_deleted", defaultValue = "0")
     val isDeleted: Boolean = false,
-    @ColumnInfo(name = "record_revision", defaultValue = "1")
     val recordRevision: Long = 1L,
 ) {
     fun toDomainOrNull(): EncryptedVaultRecord? = runCatching {
@@ -154,29 +121,25 @@ data class VaultRecordEntity(
     }
 }
 
-@Entity(tableName = "vault_preferences")
 data class VaultPreferencesEntity(
-    @PrimaryKey
-    @ColumnInfo(name = "singleton_id")
     val singletonId: Int = 0,
-    @ColumnInfo(name = "auto_lock_interval")
     val autoLockInterval: String,
-    @ColumnInfo(name = "biometric_unlock_enabled")
     val biometricUnlockEnabled: Boolean,
-    @ColumnInfo(name = "clipboard_clear_interval")
     val clipboardClearInterval: String,
-    @ColumnInfo(name = "hide_app_preview_enabled")
     val hideAppPreviewEnabled: Boolean,
-    @ColumnInfo(name = "theme_preference")
     val themePreference: String,
+    val allowInsecureHttpAutofill: Boolean = false,
+    val autoPromptBiometricOnLaunch: Boolean = true,
 ) {
     fun toDomain(): SecuritySettings = SecuritySettings(
         autoLockInterval = runCatching { AutoLockInterval.valueOf(autoLockInterval) }
             .getOrDefault(AutoLockInterval.FIVE_MINUTES),
         biometricUnlockEnabled = biometricUnlockEnabled,
+        autoPromptBiometricOnLaunch = autoPromptBiometricOnLaunch,
         clipboardClearInterval = runCatching { ClipboardClearInterval.valueOf(clipboardClearInterval) }
             .getOrDefault(ClipboardClearInterval.THIRTY_SECONDS),
         hideAppPreviewEnabled = hideAppPreviewEnabled,
+        allowInsecureHttpAutofill = allowInsecureHttpAutofill,
         themePreference = runCatching { ThemePreference.valueOf(themePreference) }
             .getOrDefault(ThemePreference.DARK),
     )
@@ -189,6 +152,42 @@ data class VaultPreferencesEntity(
             clipboardClearInterval = settings.clipboardClearInterval.name,
             hideAppPreviewEnabled = settings.hideAppPreviewEnabled,
             themePreference = settings.themePreference.name,
+            allowInsecureHttpAutofill = settings.allowInsecureHttpAutofill,
+            autoPromptBiometricOnLaunch = settings.autoPromptBiometricOnLaunch,
         )
+    }
+}
+
+/**
+ * Phase 4 device-bound biometric envelope storing the VEK encrypted under a hardware-backed
+ * Android Keystore AES-256-GCM key that requires strong biometric authentication per operation.
+ */
+data class BiometricEnvelopeEntity(
+    val singletonId: Int = 0,
+    val vaultId: String,
+    val keyAlias: String,
+    val iv: ByteArray,
+    val ciphertextAndTag: ByteArray,
+    val createdAtEpochMs: Long,
+) {
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other !is BiometricEnvelopeEntity) return false
+        return singletonId == other.singletonId &&
+            vaultId == other.vaultId &&
+            keyAlias == other.keyAlias &&
+            iv.contentEquals(other.iv) &&
+            ciphertextAndTag.contentEquals(other.ciphertextAndTag) &&
+            createdAtEpochMs == other.createdAtEpochMs
+    }
+
+    override fun hashCode(): Int {
+        var result = singletonId
+        result = 31 * result + vaultId.hashCode()
+        result = 31 * result + keyAlias.hashCode()
+        result = 31 * result + iv.contentHashCode()
+        result = 31 * result + ciphertextAndTag.contentHashCode()
+        result = 31 * result + createdAtEpochMs.hashCode()
+        return result
     }
 }

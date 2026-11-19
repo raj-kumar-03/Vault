@@ -2,7 +2,6 @@ package com.example
 
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
-import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.example.crypto.DefaultVaultCryptoEngine
 import com.example.crypto.KdfParameters
@@ -46,9 +45,7 @@ class PersistentVaultStorageTest {
     @Before
     fun setUp() {
         context = ApplicationProvider.getApplicationContext()
-        database = Room.inMemoryDatabaseBuilder(context, VaultDatabase::class.java)
-            .allowMainThreadQueries()
-            .build()
+        database = VaultDatabase.createInMemory(context)
     }
 
     @After
@@ -114,8 +111,8 @@ class PersistentVaultStorageTest {
         repo1.updateSettings { it.copy(themePreference = ThemePreference.LIGHT) }
 
         // Metadata minimization audit: inspect raw SQLite rows directly
-        val rawDb = database.openHelper.readableDatabase
-        rawDb.query("SELECT record_id, vault_id, record_type, nonce, ciphertext_and_tag FROM vault_records").use { cursor ->
+        val rawDb = database.readableDatabase
+        rawDb.rawQuery("SELECT record_id, vault_id, record_type, nonce, ciphertext_and_tag FROM vault_records", null).use { cursor ->
             assertEquals(2, cursor.count)
             while (cursor.moveToNext()) {
                 val recordId = cursor.getString(0)
@@ -162,7 +159,7 @@ class PersistentVaultStorageTest {
         // Soft-delete marks tombstone in SQLite and hides record from active list
         repo2.deleteItem(savedPasskey.id)
         assertEquals(1, repo2.items.value.size)
-        rawDb.query("SELECT is_deleted, record_revision FROM vault_records WHERE record_id = ?", arrayOf(savedPasskey.id)).use { c ->
+        rawDb.rawQuery("SELECT is_deleted, record_revision FROM vault_records WHERE record_id = ?", arrayOf(savedPasskey.id)).use { c ->
             assertTrue(c.moveToFirst())
             assertEquals(1, c.getInt(0))
             assertEquals(2L, c.getLong(1))
@@ -210,9 +207,9 @@ class PersistentVaultStorageTest {
         )
 
         // Flip one byte directly inside the SQLite ciphertext blob of victimItem
-        val writable = database.openHelper.writableDatabase
+        val writable = database.writableDatabase
         var corruptedBlob: ByteArray? = null
-        writable.query("SELECT ciphertext_and_tag FROM vault_records WHERE record_id = ?", arrayOf(victimItem.id)).use { c ->
+        writable.rawQuery("SELECT ciphertext_and_tag FROM vault_records WHERE record_id = ?", arrayOf(victimItem.id)).use { c ->
             assertTrue(c.moveToFirst())
             val orig = c.getBlob(0)
             orig[0] = (orig[0].toInt() xor 0xFF).toByte()
@@ -437,11 +434,8 @@ class PersistentVaultStorageTest {
             rawV1.close()
         }
 
-        // Now open the v1 database with Room v2 + MIGRATION_1_2 and verify decryption!
-        val migratedDb = Room.databaseBuilder(context, VaultDatabase::class.java, dbName)
-            .addMigrations(VaultDatabase.MIGRATION_1_2)
-            .allowMainThreadQueries()
-            .build()
+        // Now open the v1 database with native SQLiteOpenHelper v3 (v1 -> v2 -> v3) and verify decryption!
+        val migratedDb = VaultDatabase.openForTesting(context, dbName)
         try {
             val repo = newRepository(migratedDb)
             repo.initializeFromDisk()
@@ -450,6 +444,13 @@ class PersistentVaultStorageTest {
             assertEquals(1, repo.items.value.size)
             assertEquals("Legacy v1 Login", repo.items.value.first().title)
             assertEquals("Survived-Migration-1-to-2!", repo.items.value.first().secret)
+            // Verify v3 biometric_envelopes table was created cleanly during upgrade
+            migratedDb.readableDatabase.rawQuery(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='biometric_envelopes'",
+                null,
+            ).use { cursor ->
+                assertTrue(cursor.moveToFirst())
+            }
         } finally {
             migratedDb.close()
             context.deleteDatabase(dbName)

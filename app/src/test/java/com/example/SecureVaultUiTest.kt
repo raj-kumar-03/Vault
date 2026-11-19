@@ -9,8 +9,8 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
-import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.example.crypto.KdfParameters
 import com.example.data.PersistentVaultRepository
@@ -38,14 +38,7 @@ class SecureVaultUiTest {
 
     @Before
     fun setUp() {
-        testDb = Room.inMemoryDatabaseBuilder(
-            ApplicationProvider.getApplicationContext(),
-            VaultDatabase::class.java,
-        )
-            .allowMainThreadQueries()
-            .setQueryExecutor { it.run() }
-            .setTransactionExecutor { it.run() }
-            .build()
+        testDb = VaultDatabase.createInMemory(ApplicationProvider.getApplicationContext())
     }
 
     @After
@@ -68,7 +61,7 @@ class SecureVaultUiTest {
     fun `welcome to encrypted demo vault and primary navigation tabs work`() {
         val viewModel = createFastTestViewModel()
         composeTestRule.setContent {
-            SecureVaultApp(viewModel = viewModel)
+            SecureVaultApp(viewModel = viewModel, enableInactivityPolling = false)
         }
         composeTestRule.waitForIdle()
 
@@ -105,7 +98,7 @@ class SecureVaultUiTest {
     fun `create vault validates mismatched passwords and creates encrypted vault with recovery key`() {
         val viewModel = createFastTestViewModel()
         composeTestRule.setContent {
-            SecureVaultApp(viewModel = viewModel)
+            SecureVaultApp(viewModel = viewModel, enableInactivityPolling = false)
         }
         composeTestRule.waitForIdle()
 
@@ -132,7 +125,7 @@ class SecureVaultUiTest {
     fun `lock wipes VEK and unlock rejects wrong password then unlocks with real master passphrase`() {
         val viewModel = createFastTestViewModel()
         composeTestRule.setContent {
-            SecureVaultApp(viewModel = viewModel)
+            SecureVaultApp(viewModel = viewModel, enableInactivityPolling = false)
         }
         composeTestRule.waitForIdle()
 
@@ -152,8 +145,14 @@ class SecureVaultUiTest {
         composeTestRule.waitForIdle()
         composeTestRule.onNodeWithTag("unlock_error_banner").performScrollTo().assertIsDisplayed()
 
-        // Biometric prototype unlocks cleanly via recovery envelope when enabled
-        composeTestRule.onNodeWithTag("unlock_biometric_button")
+        // Valid master passphrase unwraps VEK and reopens vault
+        composeTestRule.onNodeWithTag("unlock_password_input")
+            .performScrollTo()
+            .performTextClearance()
+        composeTestRule.onNodeWithTag("unlock_password_input")
+            .performScrollTo()
+            .performTextInput(PersistentVaultRepository.DEFAULT_DEMO_PASSPHRASE)
+        composeTestRule.onNodeWithTag("unlock_submit_button")
             .performScrollTo()
             .performClick()
         composeTestRule.waitForIdle()
@@ -164,7 +163,7 @@ class SecureVaultUiTest {
     fun `add item validates missing title and saves encrypted record to sqlite vault`() {
         val viewModel = createFastTestViewModel()
         composeTestRule.setContent {
-            SecureVaultApp(viewModel = viewModel)
+            SecureVaultApp(viewModel = viewModel, enableInactivityPolling = false)
         }
         composeTestRule.waitForIdle()
 
@@ -190,7 +189,6 @@ class SecureVaultUiTest {
 
     @Test
     fun `cold launch with existing persisted sqlite vault routes directly to unlock screen`() {
-        // Seed a persisted vault in SQLite before launching SecureVaultApp
         val seedRepo = PersistentVaultRepository(
             vaultDao = testDb.vaultDao(),
             kdfParameters = KdfParameters.TEST_FAST,
@@ -202,14 +200,12 @@ class SecureVaultUiTest {
             seedRepo.lockVault()
         }
 
-        // Fresh ViewModel simulates cold launch reading existing SQLite vault
         val coldStartVm = createFastTestViewModel()
         composeTestRule.setContent {
-            SecureVaultApp(viewModel = coldStartVm)
+            SecureVaultApp(viewModel = coldStartVm, enableInactivityPolling = false)
         }
         composeTestRule.waitForIdle()
 
-        // Should start directly on UnlockScreen rather than WelcomeScreen
         composeTestRule.onNodeWithTag("unlock_password_input")
             .performScrollTo()
             .performTextInput(PersistentVaultRepository.DEFAULT_DEMO_PASSPHRASE)

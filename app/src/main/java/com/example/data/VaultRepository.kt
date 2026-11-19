@@ -6,7 +6,10 @@ import com.example.crypto.VaultBackupCodec
 import com.example.domain.model.PairedDevice
 import com.example.domain.model.SecuritySettings
 import com.example.domain.model.VaultItem
+import com.example.security.BiometricKeyState
+import com.example.security.CipherPreparationResult
 import kotlinx.coroutines.flow.StateFlow
+import javax.crypto.Cipher
 
 data class VaultCryptoMetadata(
     val formatVersion: Int = 1,
@@ -19,7 +22,7 @@ data class VaultCryptoMetadata(
 )
 
 /**
- * Architectural boundary for encrypted local SQLite vault operations (Phase 3).
+ * Architectural boundary for encrypted local SQLite vault operations (Phase 3 & Phase 4).
  */
 interface VaultRepository {
     val isStorageInitialized: StateFlow<Boolean>
@@ -27,11 +30,17 @@ interface VaultRepository {
     val hasVault: StateFlow<Boolean>
     val isUnlocked: StateFlow<Boolean>
     val cryptoMetadata: StateFlow<VaultCryptoMetadata>
+    val biometricState: StateFlow<BiometricKeyState>
 
     suspend fun createVault(masterPassword: CharArray): String
     suspend fun openDemoVault(): String
     suspend fun unlockWithMasterPassword(candidate: CharArray): Boolean
-    suspend fun unlockWithMockBiometric(): Boolean
+    suspend fun refreshBiometricState()
+    suspend fun prepareBiometricEnrollmentCipher(): CipherPreparationResult
+    suspend fun completeBiometricEnrollment(authenticatedCipher: Cipher): Boolean
+    suspend fun disableBiometricUnlock()
+    suspend fun prepareBiometricUnlockCipher(): CipherPreparationResult
+    suspend fun completeBiometricUnlock(authenticatedCipher: Cipher): Boolean
     suspend fun changeMasterPassword(currentPassword: CharArray, newPassword: CharArray): Boolean
     suspend fun recoverWithKey(recoveryKey: String, newMasterPassword: CharArray): Boolean
     suspend fun benchmarkKdf(): KdfBenchmarkResult

@@ -10,6 +10,7 @@ import com.example.crypto.VaultCryptoException
 import com.example.crypto.VaultHeader
 import com.example.crypto.VaultRecordCodec
 import com.example.crypto.VaultSessionKey
+import com.example.data.local.BiometricEnvelopeEntity
 import com.example.data.local.VaultDao
 import com.example.data.local.VaultHeaderEntity
 import com.example.data.local.VaultPreferencesEntity
@@ -21,6 +22,10 @@ import com.example.domain.model.PasswordEngine
 import com.example.domain.model.SecuritySettings
 import com.example.domain.model.VaultItem
 import com.example.domain.model.VaultItemType
+import com.example.security.BiometricAvailability
+import com.example.security.BiometricKeyState
+import com.example.security.CipherPreparationResult
+import com.example.security.PlatformKeystoreBridge
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -32,22 +37,25 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.UUID
+import javax.crypto.Cipher
 
 /**
- * Phase 3 encrypted local SQLite repository backed by Room ([VaultDao]) and [VaultCryptoEngine].
+ * Phase 3 & Phase 4 encrypted local SQLite repository backed by native Android SQLiteOpenHelper
+ * ([VaultDao]), [VaultCryptoEngine], and [PlatformKeystoreBridge] (Android Keystore).
  *
  * Security & durability properties:
  * - Every record stored in SQLite is AES-256-GCM encrypted with canonical AAD; titles, usernames,
  *   domains, notes, favorites, and secrets never touch SQLite in plaintext.
- * - Multi-record writes (create, demo seed, backup restore) run inside atomic Room @Transactions.
- * - Corrupted or tampered SQLite rows are isolated into [VaultCryptoMetadata.corruptedRecordIds]
- *   without crashing or silently discarding intact vault entries.
- * - Backup restoration validates file digest, unwraps VEK, and authenticates EVERY backup record
- *   before replacing local SQLite state.
+ * - Multi-record writes run inside atomic SQLite transactions.
+ * - Biometric unlock wraps the 256-bit VEK under a device-bound Android Keystore AES-256-GCM key
+ *   authorized strictly by a per-operation BiometricPrompt CryptoObject.
+ * - Biometric enrollment changes / KeyPermanentlyInvalidatedException cleanly wipe the stale key
+ *   and envelope and fall back to master-password unlock without data loss.
  */
 class PersistentVaultRepository(
     private val vaultDao: VaultDao,
     private val cryptoEngine: VaultCryptoEngine = DefaultVaultCryptoEngine(),
+    private val keystoreBridge: PlatformKeystoreBridge = UnavailableKeystoreBridge,
     private val kdfParameters: KdfParameters = KdfParameters.OWASP_MOBILE_BALANCED,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
     private val cryptoDispatcher: CoroutineDispatcher = Dispatchers.Default,
@@ -59,7 +67,7 @@ class PersistentVaultRepository(
     private var activeSessionKey: VaultSessionKey? = null
 
     @Volatile
-    private var prototypeBiometricRecoveryKey: String? = null
+    private var biometricKeyWasInvalidated: Boolean = false
 
     private val _isStorageInitialized = MutableStateFlow(false)
     override val isStorageInitialized: StateFlow<Boolean> = _isStorageInitialized.asStateFlow()
@@ -78,10 +86,13 @@ class PersistentVaultRepository(
     )
     override val cryptoMetadata: StateFlow<VaultCryptoMetadata> = _cryptoMetadata.asStateFlow()
 
+    private val _biometricState = MutableStateFlow(BiometricKeyState())
+    override val biometricState: StateFlow<BiometricKeyState> = _biometricState.asStateFlow()
+
     private val _devices = MutableStateFlow(seedMockDevices())
     override val devices: StateFlow<List<PairedDevice>> = _devices.asStateFlow()
 
-    private val _settings = MutableStateFlow(SecuritySettings())
+    private val _settings = MutableStateFlow(SecuritySettings(biometricUnlockEnabled = false))
     override val settings: StateFlow<SecuritySettings> = _settings.asStateFlow()
 
     init {
@@ -91,7 +102,8 @@ class PersistentVaultRepository(
     }
 
     suspend fun initializeFromDisk() = withContext(ioDispatcher) {
-        val prefs = vaultDao.getPreferences()?.toDomain() ?: SecuritySettings()
+        val prefs = vaultDao.getPreferences()?.toDomain()
+            ?: SecuritySettings(biometricUnlockEnabled = false)
         _settings.value = prefs
 
         val headerEntity = vaultDao.getHeader()
@@ -103,7 +115,184 @@ class PersistentVaultRepository(
         } else {
             _hasVault.value = false
         }
+
+        refreshBiometricStateLocked()
         _isStorageInitialized.value = true
+    }
+
+    override suspend fun refreshBiometricState() = withContext(ioDispatcher) {
+        refreshBiometricStateLocked()
+    }
+
+    private suspend fun refreshBiometricStateLocked() {
+        val header = vaultDao.getHeader()
+        val envelope = vaultDao.getBiometricEnvelope()
+        val envelopeMatchesVault = header != null &&
+            envelope != null &&
+            envelope.vaultId == header.vaultId
+
+        // If an envelope exists for a different vault, remove it cleanly.
+        if (envelope != null && !envelopeMatchesVault) {
+            vaultDao.deleteBiometricEnvelope()
+        }
+
+        val queried = keystoreBridge.queryAvailability(
+            hasStoredEnvelope = envelopeMatchesVault,
+            wasInvalidated = biometricKeyWasInvalidated,
+        )
+
+        // If device lock was removed or biometrics were unenrolled while an envelope existed,
+        // clean up the unusable envelope and reflect honest state.
+        val hadBoundEnvelopeBefore = _settings.value.biometricUnlockEnabled
+        if (envelopeMatchesVault && !queried.canUnlockWithBiometrics) {
+            if (queried.availability == BiometricAvailability.DEVICE_LOCK_NOT_SET ||
+                queried.availability == BiometricAvailability.NO_BIOMETRICS_ENROLLED
+            ) {
+                biometricKeyWasInvalidated = true
+                keystoreBridge.deleteKey()
+                vaultDao.deleteBiometricEnvelope()
+            }
+        }
+
+        val finalState = keystoreBridge.queryAvailability(
+            hasStoredEnvelope = vaultDao.getBiometricEnvelope()?.vaultId == header?.vaultId && header != null,
+            wasInvalidated = biometricKeyWasInvalidated,
+        )
+        _biometricState.value = finalState
+
+        val shouldBeEnabled = finalState.canUnlockWithBiometrics
+        if (hadBoundEnvelopeBefore != shouldBeEnabled) {
+            val syncedSettings = _settings.value.copy(biometricUnlockEnabled = shouldBeEnabled)
+            _settings.value = syncedSettings
+            vaultDao.upsertPreferences(VaultPreferencesEntity.fromDomain(syncedSettings))
+        }
+    }
+
+    override suspend fun prepareBiometricEnrollmentCipher(): CipherPreparationResult =
+        withContext(ioDispatcher) {
+            if (activeSessionKey == null || !_isUnlocked.value) {
+                return@withContext CipherPreparationResult.Unavailable(
+                    "Unlock the vault before binding a biometric Keystore key."
+                )
+            }
+            val currentState = keystoreBridge.queryAvailability(
+                hasStoredEnvelope = false,
+                wasInvalidated = false,
+            )
+            if (!currentState.canEnrollBiometrics) {
+                return@withContext CipherPreparationResult.Unavailable(currentState.statusMessage)
+            }
+            keystoreBridge.prepareEncryptCipher()
+        }
+
+    override suspend fun completeBiometricEnrollment(authenticatedCipher: Cipher): Boolean {
+        val session = activeSessionKey ?: return false
+        val header = withContext(ioDispatcher) { vaultDao.getHeader()?.toDomain() } ?: return false
+        if (header.vaultId != session.vaultId) return false
+
+        val sealed = withContext(cryptoDispatcher) {
+            val vek = session.borrowKeyBytes()
+            try {
+                keystoreBridge.sealVek(authenticatedCipher, vek)
+            } catch (_: Exception) {
+                null
+            } finally {
+                vek.fill(0)
+            }
+        } ?: return false
+
+        withContext(ioDispatcher) {
+            biometricKeyWasInvalidated = false
+            vaultDao.upsertBiometricEnvelope(
+                BiometricEnvelopeEntity(
+                    singletonId = 0,
+                    vaultId = header.vaultId,
+                    keyAlias = sealed.keyAlias,
+                    iv = sealed.iv,
+                    ciphertextAndTag = sealed.ciphertextAndTag,
+                    createdAtEpochMs = System.currentTimeMillis(),
+                )
+            )
+            val updatedSettings = _settings.value.copy(biometricUnlockEnabled = true)
+            _settings.value = updatedSettings
+            vaultDao.upsertPreferences(VaultPreferencesEntity.fromDomain(updatedSettings))
+            refreshBiometricStateLocked()
+        }
+        return true
+    }
+
+    override suspend fun disableBiometricUnlock() = withContext(ioDispatcher) {
+        biometricKeyWasInvalidated = false
+        keystoreBridge.deleteKey()
+        vaultDao.deleteBiometricEnvelope()
+        val updatedSettings = _settings.value.copy(biometricUnlockEnabled = false)
+        _settings.value = updatedSettings
+        vaultDao.upsertPreferences(VaultPreferencesEntity.fromDomain(updatedSettings))
+        refreshBiometricStateLocked()
+    }
+
+    override suspend fun prepareBiometricUnlockCipher(): CipherPreparationResult =
+        withContext(ioDispatcher) {
+            val header = vaultDao.getHeader() ?: return@withContext CipherPreparationResult.Unavailable(
+                "No local vault found."
+            )
+            val envelope = vaultDao.getBiometricEnvelope()
+            if (envelope == null || envelope.vaultId != header.vaultId) {
+                return@withContext CipherPreparationResult.Unavailable(
+                    "Biometric unlock is not configured for this vault."
+                )
+            }
+
+            when (val result = keystoreBridge.prepareDecryptCipher(envelope.iv)) {
+                is CipherPreparationResult.Ready -> result
+                is CipherPreparationResult.KeyInvalidated -> {
+                    handleBiometricKeyInvalidatedLocked()
+                    CipherPreparationResult.KeyInvalidated
+                }
+                is CipherPreparationResult.Unavailable -> result
+            }
+        }
+
+    override suspend fun completeBiometricUnlock(authenticatedCipher: Cipher): Boolean {
+        val (header, envelope) = withContext(ioDispatcher) {
+            vaultDao.getHeader()?.toDomain() to vaultDao.getBiometricEnvelope()
+        }
+        if (header == null || envelope == null || envelope.vaultId != header.vaultId) {
+            return false
+        }
+
+        val session = withContext(cryptoDispatcher) {
+            var unwrappedVek: ByteArray? = null
+            try {
+                unwrappedVek = keystoreBridge.unsealVek(authenticatedCipher, envelope.ciphertextAndTag)
+                VaultSessionKey.fromUnwrappedVek(
+                    vaultId = header.vaultId,
+                    formatVersion = header.formatVersion,
+                    vekBytes = unwrappedVek,
+                )
+            } catch (_: Exception) {
+                null
+            } finally {
+                unwrappedVek?.fill(0)
+            }
+        } ?: return false
+
+        activeSessionKey?.wipe()
+        activeSessionKey = session
+        _hasVault.value = true
+        _isUnlocked.value = true
+        reloadDecryptedItemsLocked(header, session)
+        return true
+    }
+
+    private suspend fun handleBiometricKeyInvalidatedLocked() {
+        biometricKeyWasInvalidated = true
+        keystoreBridge.deleteKey()
+        vaultDao.deleteBiometricEnvelope()
+        val updatedSettings = _settings.value.copy(biometricUnlockEnabled = false)
+        _settings.value = updatedSettings
+        vaultDao.upsertPreferences(VaultPreferencesEntity.fromDomain(updatedSettings))
+        refreshBiometricStateLocked()
     }
 
     override suspend fun createVault(masterPassword: CharArray): String {
@@ -119,15 +308,17 @@ class PersistentVaultRepository(
         }
 
         withContext(ioDispatcher) {
+            biometricKeyWasInvalidated = false
+            keystoreBridge.deleteKey()
             vaultDao.replaceVaultAtomically(
                 header = VaultHeaderEntity.fromDomain(bundle.header),
                 records = emptyList(),
             )
+            refreshBiometricStateLocked()
         }
 
         activeSessionKey?.wipe()
         activeSessionKey = bundle.sessionKey
-        prototypeBiometricRecoveryKey = bundle.formattedRecoveryKey
         _items.value = emptyList()
         _hasVault.value = true
         _isUnlocked.value = true
@@ -168,15 +359,17 @@ class PersistentVaultRepository(
         }
 
         withContext(ioDispatcher) {
+            biometricKeyWasInvalidated = false
+            keystoreBridge.deleteKey()
             vaultDao.replaceVaultAtomically(
                 header = VaultHeaderEntity.fromDomain(bundle.header),
                 records = encryptedEntities,
             )
+            refreshBiometricStateLocked()
         }
 
         activeSessionKey?.wipe()
         activeSessionKey = bundle.sessionKey
-        prototypeBiometricRecoveryKey = bundle.formattedRecoveryKey
         _hasVault.value = true
         _isUnlocked.value = true
         _isStorageInitialized.value = true
@@ -198,30 +391,6 @@ class PersistentVaultRepository(
                 null
             } finally {
                 candidate.fill('\u0000')
-            }
-        } ?: return false
-
-        activeSessionKey?.wipe()
-        activeSessionKey = session
-        _hasVault.value = true
-        _isUnlocked.value = true
-        reloadDecryptedItemsLocked(header, session)
-        return true
-    }
-
-    /**
-     * Phase 4 replaces this prototype trigger with Android Keystore + BiometricPrompt CryptoObject.
-     */
-    override suspend fun unlockWithMockBiometric(): Boolean {
-        if (!_settings.value.biometricUnlockEnabled) return false
-        val recoveryKey = prototypeBiometricRecoveryKey ?: return false
-        val header = withContext(ioDispatcher) { vaultDao.getHeader()?.toDomain() } ?: return false
-
-        val session = withContext(cryptoDispatcher) {
-            try {
-                cryptoEngine.unlockWithRecoveryKey(header, recoveryKey)
-            } catch (_: VaultCryptoException) {
-                null
             }
         } ?: return false
 
@@ -402,7 +571,6 @@ class PersistentVaultRepository(
             try {
                 val backup = VaultBackupCodec.decode(backupBytes)
                 val session = cryptoEngine.unlockWithMasterPassword(backup.header, masterPassword)
-                // Verify EVERY encrypted record authenticates cleanly BEFORE touching local SQLite.
                 verifyAllBackupRecords(session, backup.records)
                 backup to session
             } catch (_: VaultCryptoException) {
@@ -495,6 +663,8 @@ class PersistentVaultRepository(
         session: VaultSessionKey,
     ) {
         withContext(ioDispatcher) {
+            biometricKeyWasInvalidated = false
+            keystoreBridge.deleteKey()
             val entities = records.map { rec ->
                 VaultRecordEntity.fromDomain(rec, isDeleted = false, revision = 1L)
             }
@@ -502,10 +672,10 @@ class PersistentVaultRepository(
                 header = VaultHeaderEntity.fromDomain(header),
                 records = entities,
             )
+            refreshBiometricStateLocked()
         }
         activeSessionKey?.wipe()
         activeSessionKey = session
-        prototypeBiometricRecoveryKey = null
         _hasVault.value = true
         _isUnlocked.value = true
         _isStorageInitialized.value = true
@@ -567,6 +737,32 @@ class PersistentVaultRepository(
                 isPersistedToSqlite = true,
             )
         }
+    }
+
+    private object UnavailableKeystoreBridge : PlatformKeystoreBridge {
+        override val keyAlias: String = "unavailable"
+        override fun queryAvailability(hasStoredEnvelope: Boolean, wasInvalidated: Boolean) =
+            BiometricKeyState(
+                availability = BiometricAvailability.HARDWARE_UNAVAILABLE,
+                hasBoundEnvelope = false,
+                isDeviceSecure = false,
+                keyAlias = keyAlias,
+                statusMessage = "Biometric hardware unavailable in this environment.",
+            )
+
+        override fun prepareEncryptCipher(): CipherPreparationResult =
+            CipherPreparationResult.Unavailable("Biometric hardware unavailable.")
+
+        override fun prepareDecryptCipher(iv: ByteArray): CipherPreparationResult =
+            CipherPreparationResult.Unavailable("Biometric hardware unavailable.")
+
+        override fun sealVek(authenticatedCipher: Cipher, vekBytes: ByteArray) =
+            throw UnsupportedOperationException("Biometric hardware unavailable.")
+
+        override fun unsealVek(authenticatedCipher: Cipher, ciphertextAndTag: ByteArray) =
+            throw UnsupportedOperationException("Biometric hardware unavailable.")
+
+        override fun deleteKey() = Unit
     }
 
     companion object {

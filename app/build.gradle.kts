@@ -1,8 +1,8 @@
 plugins {
   alias(libs.plugins.android.application)
   alias(libs.plugins.kotlin.compose)
-  alias(libs.plugins.google.devtools.ksp)
-  // Unused plugins commented out to eliminate extra build tasks and classpath overhead:
+  // Unused plugins commented out to eliminate extra build tasks and KSP annotation-processing overhead:
+  // alias(libs.plugins.google.devtools.ksp)
   // alias(libs.plugins.secrets)
   // alias(libs.plugins.google.services)
 }
@@ -91,15 +91,17 @@ dependencies {
   implementation(libs.androidx.lifecycle.runtime.compose)
   implementation(libs.androidx.lifecycle.runtime.ktx)
   implementation(libs.androidx.lifecycle.viewmodel.compose)
+  implementation(libs.androidx.biometric)
   implementation(libs.androidx.navigation.compose)
-  implementation(libs.androidx.room.ktx)
-  implementation(libs.androidx.room.runtime)
+  // Replaced Room + KSP with native Android SQLiteOpenHelper for faster incremental compiles:
+  // implementation(libs.androidx.room.ktx)
+  // implementation(libs.androidx.room.runtime)
   // implementation(libs.coil.compose)
   // implementation(libs.converter.moshi)
   // implementation(libs.firebase.ai)
   // implementation(libs.firebase.firestore)
   // implementation(libs.firebase.auth)
-  // implementation(libs.androidx.credentials)
+  implementation(libs.androidx.credentials)
   // implementation(libs.androidx.credentials.play.services)
   // implementation(libs.googleid)
   // implementation(libs.firebase.appcheck.recaptcha)
@@ -125,6 +127,6 @@ dependencies {
   androidTestImplementation(libs.androidx.runner)
   debugImplementation(libs.androidx.compose.ui.test.manifest)
   debugImplementation(libs.androidx.compose.ui.tooling)
-  "ksp"(libs.androidx.room.compiler)
+  // "ksp"(libs.androidx.room.compiler)
   // "ksp"(libs.moshi.kotlin.codegen)
 }

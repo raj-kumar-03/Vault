@@ -189,12 +189,12 @@ fun ChangeMasterPasswordSheet(
     val colors = VaultTheme.colors
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
-    var currentPassword by rememberSaveable { mutableStateOf("") }
-    var newPassword by rememberSaveable { mutableStateOf("") }
-    var confirmPassword by rememberSaveable { mutableStateOf("") }
-    var revealCurrent by rememberSaveable { mutableStateOf(false) }
-    var revealNew by rememberSaveable { mutableStateOf(false) }
-    var errorMessage by rememberSaveable { mutableStateOf<String?>(null) }
+    var currentPassword by remember { mutableStateOf("") }
+    var newPassword by remember { mutableStateOf("") }
+    var confirmPassword by remember { mutableStateOf("") }
+    var revealCurrent by remember { mutableStateOf(false) }
+    var revealNew by remember { mutableStateOf(false) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
 
     val strength = remember(newPassword) { PasswordEngine.evaluateMasterPassword(newPassword) }
 
@@ -319,11 +319,11 @@ fun RecoverVaultSheet(
     val colors = VaultTheme.colors
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
-    var recoveryKeyInput by rememberSaveable { mutableStateOf("") }
-    var newPassword by rememberSaveable { mutableStateOf("") }
-    var confirmPassword by rememberSaveable { mutableStateOf("") }
-    var revealNew by rememberSaveable { mutableStateOf(false) }
-    var errorMessage by rememberSaveable { mutableStateOf<String?>(null) }
+    var recoveryKeyInput by remember { mutableStateOf("") }
+    var newPassword by remember { mutableStateOf("") }
+    var confirmPassword by remember { mutableStateOf("") }
+    var revealNew by remember { mutableStateOf(false) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,

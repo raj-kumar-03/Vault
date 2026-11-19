@@ -90,8 +90,10 @@ enum class ClipboardClearInterval(val label: String) {
 data class SecuritySettings(
     val autoLockInterval: AutoLockInterval = AutoLockInterval.FIVE_MINUTES,
     val biometricUnlockEnabled: Boolean = true,
+    val autoPromptBiometricOnLaunch: Boolean = true,
     val clipboardClearInterval: ClipboardClearInterval = ClipboardClearInterval.THIRTY_SECONDS,
-    val hideAppPreviewEnabled: Boolean = false,
+    val hideAppPreviewEnabled: Boolean = true,
+    val allowInsecureHttpAutofill: Boolean = false,
     val themePreference: ThemePreference = ThemePreference.DARK,
 )
 
