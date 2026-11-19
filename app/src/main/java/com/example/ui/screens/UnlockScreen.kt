@@ -47,7 +47,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.example.R
-import com.example.data.MockVaultRepository
+import com.example.data.EncryptedMemoryVaultRepository
 import com.example.ui.components.InlineError
 import com.example.ui.components.PrimaryButton
 import com.example.ui.components.SecretField
@@ -58,30 +58,34 @@ import com.example.ui.theme.VaultTheme
 @Composable
 fun UnlockScreen(
     biometricEnabled: Boolean,
-    onUnlockWithPassword: (String) -> Boolean,
-    onUnlockWithBiometric: () -> Boolean,
+    isBusy: Boolean,
+    onUnlockWithPassword: (candidate: String, onResult: (Boolean) -> Unit) -> Unit,
+    onUnlockWithBiometric: (onResult: (Boolean) -> Unit) -> Unit,
+    onRecoverWithKey: (recoveryKey: String, newMasterPassword: String, onResult: (Boolean) -> Unit) -> Unit,
     onReturnToWelcome: () -> Unit,
 ) {
     val colors = VaultTheme.colors
     var password by rememberSaveable { mutableStateOf("") }
     var revealed by rememberSaveable { mutableStateOf(false) }
     var errorMessage by rememberSaveable { mutableStateOf<String?>(null) }
-    var showRecoverySheet by remember { mutableStateOf(false) }
+    var showRecoverSheet by remember { mutableStateOf(false) }
 
     val genericError = stringResource(R.string.error_unlock_generic)
     val bioDesc = stringResource(R.string.cd_biometric_unlock)
 
     fun submitUnlock() {
+        if (isBusy) return
         if (password.isEmpty()) {
             errorMessage = genericError
             return
         }
-        val ok = onUnlockWithPassword(password)
-        if (!ok) {
-            errorMessage = genericError
-        } else {
-            errorMessage = null
-            password = ""
+        onUnlockWithPassword(password) { ok ->
+            if (!ok) {
+                errorMessage = genericError
+            } else {
+                errorMessage = null
+                password = ""
+            }
         }
     }
 
@@ -117,7 +121,7 @@ fun UnlockScreen(
                     .padding(horizontal = 12.dp, vertical = 6.dp),
             ) {
                 Text(
-                    text = "Vault Locked • Local Prototype",
+                    text = "Vault Locked • VEK Wiped From Memory",
                     style = MaterialTheme.typography.labelSmall,
                     color = colors.primary,
                 )
@@ -136,9 +140,9 @@ fun UnlockScreen(
 
             Text(
                 text = if (biometricEnabled) {
-                    "Enter your master password or use the Phase 1 biometric prototype."
+                    "Enter your master password to derive your Argon2id key, or use the biometric prototype."
                 } else {
-                    "Enter your master password to unlock your local vault."
+                    "Enter your master password to unwrap your Vault Encryption Key."
                 },
                 style = MaterialTheme.typography.bodyMedium,
                 color = colors.textSecondary,
@@ -158,9 +162,9 @@ fun UnlockScreen(
                         modifier = Modifier
                             .size(72.dp)
                             .clip(CircleShape)
-                            .clickable {
-                                if (!onUnlockWithBiometric()) {
-                                    errorMessage = genericError
+                            .clickable(enabled = !isBusy) {
+                                onUnlockWithBiometric { ok ->
+                                    if (!ok) errorMessage = genericError
                                 }
                             }
                             .semantics { contentDescription = bioDesc }
@@ -176,7 +180,7 @@ fun UnlockScreen(
                         }
                     }
                     Text(
-                        text = "Biometric prototype (Phase 4 hardware Keystore)",
+                        text = "Biometric prototype (hardware Keystore binding in Phase 4)",
                         style = MaterialTheme.typography.labelSmall,
                         color = colors.textSecondary,
                     )
@@ -222,7 +226,8 @@ fun UnlockScreen(
             )
 
             PrimaryButton(
-                text = "Unlock",
+                text = if (isBusy) "Deriving Key…" else "Unlock",
+                enabled = !isBusy,
                 onClick = { submitUnlock() },
                 modifier = Modifier.fillMaxWidth(),
                 testTag = "unlock_submit_button",
@@ -239,12 +244,12 @@ fun UnlockScreen(
                     modifier = Modifier.padding(12.dp),
                 ) {
                     Text(
-                        text = "Phase 1 test hint",
+                        text = "Phase 2 test hint",
                         style = MaterialTheme.typography.labelSmall,
                         color = colors.textSecondary,
                     )
                     Text(
-                        text = "Default mock passphrase: ${MockVaultRepository.DEFAULT_DEMO_PASSPHRASE} (or the password you created).",
+                        text = "Demo vault passphrase: ${EncryptedMemoryVaultRepository.DEFAULT_DEMO_PASSPHRASE} (or the password you set).",
                         style = VaultMonoLabelStyle,
                         color = colors.primary,
                     )
@@ -256,11 +261,12 @@ fun UnlockScreen(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 TextButton(
-                    onClick = { showRecoverySheet = true },
-                    modifier = Modifier.testTag("unlock_recovery_info_button"),
+                    onClick = { showRecoverSheet = true },
+                    enabled = !isBusy,
+                    modifier = Modifier.testTag("unlock_use_recovery_key_button"),
                 ) {
                     Text(
-                        text = "About Recovery",
+                        text = "Use Recovery Key",
                         style = MaterialTheme.typography.labelLarge,
                         color = colors.primary,
                     )
@@ -272,6 +278,7 @@ fun UnlockScreen(
                 )
                 TextButton(
                     onClick = onReturnToWelcome,
+                    enabled = !isBusy,
                     modifier = Modifier.testTag("unlock_welcome_button"),
                 ) {
                     Text(
@@ -284,10 +291,16 @@ fun UnlockScreen(
         }
     }
 
-    if (showRecoverySheet) {
-        RecoveryInfoSheet(
-            mode = EducationSheetMode.RECOVERY,
-            onDismiss = { showRecoverySheet = false },
+    if (showRecoverSheet) {
+        RecoverVaultSheet(
+            isBusy = isBusy,
+            onDismiss = { showRecoverSheet = false },
+            onSubmitRecovery = { recoveryKey, newPw, onResult ->
+                onRecoverWithKey(recoveryKey, newPw) { ok ->
+                    if (ok) showRecoverSheet = false
+                    onResult(ok)
+                }
+            },
         )
     }
 }

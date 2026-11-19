@@ -10,9 +10,11 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextInput
-import com.example.data.MockVaultRepository
+import com.example.crypto.KdfParameters
+import com.example.data.EncryptedMemoryVaultRepository
 import com.example.ui.navigation.SecureVaultApp
 import com.example.ui.state.VaultViewModel
+import kotlinx.coroutines.Dispatchers
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -26,25 +28,29 @@ class SecureVaultUiTest {
     @get:Rule
     val composeTestRule = createComposeRule()
 
+    private fun createFastTestViewModel(): VaultViewModel = VaultViewModel(
+        EncryptedMemoryVaultRepository(
+            kdfParameters = KdfParameters.TEST_FAST,
+            cryptoDispatcher = Dispatchers.Unconfined,
+        )
+    )
+
     @Test
-    fun `welcome to demo vault and primary navigation tabs work`() {
-        val viewModel = VaultViewModel(MockVaultRepository())
+    fun `welcome to encrypted demo vault and primary navigation tabs work`() {
+        val viewModel = createFastTestViewModel()
         composeTestRule.setContent {
             SecureVaultApp(viewModel = viewModel)
         }
         composeTestRule.waitForIdle()
 
-        // Welcome screen navigates into demo vault
         composeTestRule.onNodeWithTag("welcome_demo_vault_button").performScrollTo().performClick()
         composeTestRule.waitForIdle()
 
-        // Vault screen displays search and seeded mock login (scroll LazyColumn for compact test viewport)
         composeTestRule.onNodeWithTag("vault_search_input").assertIsDisplayed()
         composeTestRule.onNodeWithTag("vault_item_list")
             .performScrollToNode(hasTestTag("vault_item_mock-1"))
         composeTestRule.onNodeWithText("CodeForge Git").assertIsDisplayed()
 
-        // Navigate across primary destinations
         composeTestRule.onNodeWithTag("nav_generator").performClick()
         composeTestRule.waitForIdle()
         composeTestRule.onNodeWithTag("generator_output_text").assertIsDisplayed()
@@ -59,8 +65,8 @@ class SecureVaultUiTest {
     }
 
     @Test
-    fun `create vault validates mismatched passwords and preserves input`() {
-        val viewModel = VaultViewModel(MockVaultRepository())
+    fun `create vault validates mismatched passwords and creates encrypted vault with recovery key`() {
+        val viewModel = createFastTestViewModel()
         composeTestRule.setContent {
             SecureVaultApp(viewModel = viewModel)
         }
@@ -86,8 +92,8 @@ class SecureVaultUiTest {
     }
 
     @Test
-    fun `lock and unlock rejects wrong password with generic message then unlocks`() {
-        val viewModel = VaultViewModel(MockVaultRepository())
+    fun `lock wipes VEK and unlock rejects wrong password then unlocks with real master passphrase`() {
+        val viewModel = createFastTestViewModel()
         composeTestRule.setContent {
             SecureVaultApp(viewModel = viewModel)
         }
@@ -109,7 +115,7 @@ class SecureVaultUiTest {
         composeTestRule.waitForIdle()
         composeTestRule.onNodeWithTag("unlock_error_banner").performScrollTo().assertIsDisplayed()
 
-        // Biometric prototype unlocks cleanly when enabled
+        // Biometric prototype unlocks cleanly via recovery envelope when enabled
         composeTestRule.onNodeWithTag("unlock_biometric_button")
             .performScrollTo()
             .performClick()
@@ -118,8 +124,8 @@ class SecureVaultUiTest {
     }
 
     @Test
-    fun `add item validates missing title and saves new item to vault`() {
-        val viewModel = VaultViewModel(MockVaultRepository())
+    fun `add item validates missing title and saves encrypted record to vault`() {
+        val viewModel = createFastTestViewModel()
         composeTestRule.setContent {
             SecureVaultApp(viewModel = viewModel)
         }

@@ -55,6 +55,7 @@ import com.example.ui.theme.VaultTheme
 
 @Composable
 fun WelcomeScreen(
+    isBusy: Boolean = false,
     onCreateVault: () -> Unit,
     onExploreDemoVault: () -> Unit,
 ) {
@@ -164,8 +165,8 @@ fun WelcomeScreen(
                         )
                         WelcomePrincipleRow(
                             icon = Icons.Outlined.VerifiedUser,
-                            title = "Phase 1 Prototype Boundary",
-                            description = "Uses synthetic sample data in memory only. Real Argon2id + AES-256-GCM cryptography arrives in Phase 2.",
+                            title = "Phase 2 Crypto Active (In-Memory)",
+                            description = "Records are encrypted with Argon2id, HKDF-SHA256, and AES-256-GCM with AAD. SQLite disk persistence arrives in Phase 3.",
                         )
                     }
                 }
@@ -175,6 +176,7 @@ fun WelcomeScreen(
                 PrimaryButton(
                     text = "Create Vault",
                     onClick = onCreateVault,
+                    enabled = !isBusy,
                     modifier = Modifier.fillMaxWidth(),
                     testTag = "welcome_create_vault_button",
                 )
@@ -182,8 +184,9 @@ fun WelcomeScreen(
                 Spacer(modifier = Modifier.height(12.dp))
 
                 SecondaryButton(
-                    text = "Explore Demo Vault",
+                    text = if (isBusy) "Deriving Vault Key…" else "Explore Demo Vault",
                     onClick = onExploreDemoVault,
+                    enabled = !isBusy,
                     modifier = Modifier.fillMaxWidth(),
                     testTag = "welcome_demo_vault_button",
                 )

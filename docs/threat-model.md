@@ -1,22 +1,19 @@
-# Threat Model Draft — SecureVault
+# Threat Model — SecureVault (Phase 2)
 
-**Status:** Phase 1 draft (pre-cryptography).  
-**Critical warning:** Phase 1 stores **no real secrets** and implements **no cryptographic protection**. Never enter production credentials into a Phase 1 build.
+**Status:** Phase 2 cryptographic boundary implemented and tested (in-memory only).  
+**Notice:** Do not store critical real-world credentials until Phase 3 persistent storage, Phase 4 platform key protection, and an independent security review are complete.
 
-## Trust Boundaries
+## Implemented Controls (Phases 1 & 2)
 
-1. **User ↔ UI Layer:** Shoulder-surfing, app-switcher snapshots, and accidental disclosure.
-   - *Phase 1 mitigations:* Passwords are never rendered in list rows; secrets default to masked; temporary reveal shows an explicit warning banner and auto-masks after 15 seconds; snackbars never echo secrets; `FLAG_SECURE` toggle available in Settings (enforced by default in Phase 4); generic unlock error messages prevent oracle leakage.
-2. **UI Layer ↔ Clipboard:** Android clipboard history and third-party keyboards may retain copied text.
-   - *Phase 1 mitigations:* `ClipDescription.EXTRA_IS_SENSITIVE` set on Android 13+, best-effort auto-clear timer implemented, and UI explicitly states clearing is best-effort only.
-3. **App Process ↔ Local Storage (Phase 2 & 3):**
-   - *Planned:* Argon2id KDF → KEK wrapping random VEK; AES-256-GCM per-record encryption with unique nonces and AAD binding `(vault_id, record_id, record_type, format_version)`; independent recovery key wrapping VEK.
-4. **App Process ↔ Platform Hardware (Phase 4):**
-   - *Planned:* Android Keystore key wrapping with `BiometricPrompt` crypto-object authorization and key-invalidation recovery.
-5. **Local Device ↔ Paired Device (Phase 6):**
-   - *Planned:* Ephemeral X25519 + HKDF-SHA256 authenticated transport over LAN with user-verified Short Authentication Strings (SAS), replay counters, and explicit revocation. Master password, VEK, and recovery key are never placed in QR codes.
+1. **Master-Password Brute Force Resistance (Phase 2):** Argon2id (RFC 9106 `0x13`, `m=19 MiB, t=2, p=1`, 128-bit random salt) derives a 256-bit KEK wrapping a random 256-bit VEK.
+2. **Confidentiality & Integrity of Records (Phase 2):** Every record is encrypted with AES-256-GCM using a fresh 96-bit CSPRNG nonce and canonical length-prefixed AAD binding `formatVersion`, `vaultId`, `recordId`, and `recordType`. Bit flips, nonce reuse/modification, tag tampering, and cross-record swapping are rejected.
+3. **Independent Recovery Without Master-Password Equivalence (Phase 2):** A separately generated 256-bit random recovery key (`SVRK-...` with SHA-256 checksum) wraps the VEK via HKDF-SHA256, enabling master-password reset without re-encrypting records.
+4. **Memory & Exception Hygiene (Phase 2):** `VaultSessionKey.wipe()` zeroes the VEK on lock, KDF/plaintext buffers are zeroed in `finally` blocks, and typed `VaultCryptoException`s omit secrets from messages.
+5. **UI & Clipboard Mitigations (Phase 1):** Masked-by-default secrets, 15s auto-re-masking reveal banner, `EXTRA_IS_SENSITIVE` clipboard flag (API 33+), best-effort auto-clear, optional `FLAG_SECURE`, generic unlock error messages.
 
-## Non-Goals (All Phases)
+## Planned Controls (Phases 3–6)
 
-- No cloud backend, account servers, remote analytics, or third-party telemetry.
-- No defense against a fully compromised/rooted OS actively instrumenting the running process while unlocked.
+- **Phase 3:** Encrypted SQLite storage, minimized unencrypted metadata, transactional writes, versioned encrypted backup/restore.
+- **Phase 4:** Android Keystore hardware-backed key wrapping, `BiometricPrompt` CryptoObject authorization, forced `FLAG_SECURE`, background auto-lock & process-death wipe.
+- **Phase 5:** Android `AutofillService` with strict origin & app-signature checks.
+- **Phase 6:** Ephemeral X25519 + HKDF-SHA256 local Wi-Fi sync with SAS confirmation, replay protection, and revocation.

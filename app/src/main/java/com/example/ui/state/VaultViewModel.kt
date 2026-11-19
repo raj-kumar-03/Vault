@@ -3,7 +3,9 @@ package com.example.ui.state
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import com.example.data.MockVaultRepository
+import com.example.crypto.KdfBenchmarkResult
+import com.example.data.EncryptedMemoryVaultRepository
+import com.example.data.VaultCryptoMetadata
 import com.example.domain.model.AutoLockInterval
 import com.example.domain.model.ClipboardClearInterval
 import com.example.domain.model.GeneratorConfig
@@ -22,6 +24,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 
 data class GeneratorUiState(
     val config: GeneratorConfig = GeneratorConfig(),
@@ -32,6 +35,9 @@ data class GeneratorUiState(
 data class VaultUiState(
     val hasVault: Boolean = false,
     val isUnlocked: Boolean = false,
+    val isCryptoBusy: Boolean = false,
+    val pendingRecoveryKeyReveal: String? = null,
+    val cryptoMetadata: VaultCryptoMetadata = VaultCryptoMetadata(),
     val items: List<VaultItem> = emptyList(),
     val searchQuery: String = "",
     val selectedCategory: VaultCategoryFilter = VaultCategoryFilter.ALL,
@@ -66,9 +72,6 @@ data class VaultUiState(
     val favoriteItems: List<VaultItem>
         get() = items.filter { it.isFavorite }
 
-    val recentItems: List<VaultItem>
-        get() = items.sortedByDescending { it.lastUsedEpochMs }.take(4)
-
     fun countForFilter(filter: VaultCategoryFilter): Int = when (filter) {
         VaultCategoryFilter.ALL -> items.size
         VaultCategoryFilter.FAVORITES -> items.count { it.isFavorite }
@@ -80,13 +83,15 @@ data class VaultUiState(
 }
 
 class VaultViewModel(
-    private val repository: MockVaultRepository = MockVaultRepository(),
+    private val repository: EncryptedMemoryVaultRepository = EncryptedMemoryVaultRepository(),
 ) : ViewModel() {
 
     private val searchQueryFlow = MutableStateFlow("")
     private val selectedCategoryFlow = MutableStateFlow(VaultCategoryFilter.ALL)
     private val selectedItemIdFlow = MutableStateFlow<String?>(null)
     private val pendingGeneratedPasswordFlow = MutableStateFlow<String?>(null)
+    private val isCryptoBusyFlow = MutableStateFlow(false)
+    private val pendingRecoveryKeyFlow = MutableStateFlow<String?>(null)
 
     private val initialConfig = GeneratorConfig()
     private val generatorFlow = MutableStateFlow(
@@ -97,20 +102,22 @@ class VaultViewModel(
         )
     )
 
-    private val baseState = combine(
+    private val repoState = combine(
         repository.hasVault,
         repository.isUnlocked,
         repository.items,
         repository.devices,
         repository.settings,
     ) { hasVault, isUnlocked, items, devices, settings ->
-        VaultUiState(
-            hasVault = hasVault,
-            isUnlocked = isUnlocked,
-            items = items,
-            devices = devices,
-            settings = settings,
-        )
+        RepoBundle(hasVault, isUnlocked, items, devices, settings)
+    }
+
+    private val cryptoStatusFlow = combine(
+        repository.cryptoMetadata,
+        isCryptoBusyFlow,
+        pendingRecoveryKeyFlow,
+    ) { meta, busy, recoveryKey ->
+        CryptoBundle(meta, busy, recoveryKey)
     }
 
     private val uiFilters = combine(
@@ -123,11 +130,23 @@ class VaultViewModel(
         FilterBundle(query, category, selectedId, generator, pendingPassword)
     }
 
-    val uiState: StateFlow<VaultUiState> = combine(baseState, uiFilters) { base, filters ->
-        base.copy(
+    val uiState: StateFlow<VaultUiState> = combine(
+        repoState,
+        cryptoStatusFlow,
+        uiFilters,
+    ) { repo, crypto, filters ->
+        VaultUiState(
+            hasVault = repo.hasVault,
+            isUnlocked = repo.isUnlocked,
+            isCryptoBusy = crypto.isBusy,
+            pendingRecoveryKeyReveal = crypto.pendingRecoveryKey,
+            cryptoMetadata = crypto.metadata,
+            items = repo.items,
             searchQuery = filters.query,
             selectedCategory = filters.category,
-            selectedItemId = filters.selectedItemId ?: base.items.firstOrNull()?.id,
+            selectedItemId = filters.selectedItemId ?: repo.items.firstOrNull()?.id,
+            devices = repo.devices,
+            settings = repo.settings,
             generator = filters.generator,
             pendingGeneratedPasswordForEditor = filters.pendingPassword,
         )
@@ -137,6 +156,7 @@ class VaultViewModel(
         initialValue = VaultUiState(
             hasVault = repository.hasVault.value,
             isUnlocked = repository.isUnlocked.value,
+            cryptoMetadata = repository.cryptoMetadata.value,
             items = repository.items.value,
             selectedItemId = repository.items.value.firstOrNull()?.id,
             devices = repository.devices.value,
@@ -145,23 +165,111 @@ class VaultViewModel(
         ),
     )
 
-    fun createVault(masterPassword: String) {
-        repository.createMockVault(masterPassword)
+    fun createVault(masterPassword: String, onCreated: () -> Unit) {
+        viewModelScope.launch {
+            isCryptoBusyFlow.value = true
+            try {
+                val recoveryKey = repository.createVault(masterPassword.toCharArray())
+                pendingRecoveryKeyFlow.value = recoveryKey
+                onCreated()
+            } finally {
+                isCryptoBusyFlow.value = false
+            }
+        }
     }
 
-    fun openDemoVault() {
-        repository.openDemoVault()
+    fun openDemoVault(onOpened: () -> Unit) {
+        viewModelScope.launch {
+            isCryptoBusyFlow.value = true
+            try {
+                repository.openDemoVault()
+                onOpened()
+            } finally {
+                isCryptoBusyFlow.value = false
+            }
+        }
     }
 
-    fun attemptUnlock(candidate: String): Boolean {
-        return repository.unlockWithMasterPassword(candidate)
+    fun dismissRecoveryKeyReveal() {
+        pendingRecoveryKeyFlow.value = null
     }
 
-    fun attemptBiometricUnlock(): Boolean {
-        return repository.unlockWithMockBiometric()
+    fun attemptUnlock(candidate: String, onResult: (Boolean) -> Unit) {
+        viewModelScope.launch {
+            isCryptoBusyFlow.value = true
+            try {
+                val ok = repository.unlockWithMasterPassword(candidate.toCharArray())
+                onResult(ok)
+            } finally {
+                isCryptoBusyFlow.value = false
+            }
+        }
+    }
+
+    fun attemptBiometricUnlock(onResult: (Boolean) -> Unit) {
+        viewModelScope.launch {
+            isCryptoBusyFlow.value = true
+            try {
+                val ok = repository.unlockWithMockBiometric()
+                onResult(ok)
+            } finally {
+                isCryptoBusyFlow.value = false
+            }
+        }
+    }
+
+    fun changeMasterPassword(
+        currentPassword: String,
+        newPassword: String,
+        onResult: (Boolean) -> Unit,
+    ) {
+        viewModelScope.launch {
+            isCryptoBusyFlow.value = true
+            try {
+                val ok = repository.changeMasterPassword(
+                    currentPassword = currentPassword.toCharArray(),
+                    newPassword = newPassword.toCharArray(),
+                )
+                onResult(ok)
+            } finally {
+                isCryptoBusyFlow.value = false
+            }
+        }
+    }
+
+    fun recoverWithKey(
+        recoveryKey: String,
+        newMasterPassword: String,
+        onResult: (Boolean) -> Unit,
+    ) {
+        viewModelScope.launch {
+            isCryptoBusyFlow.value = true
+            try {
+                val ok = repository.recoverWithKey(
+                    recoveryKey = recoveryKey,
+                    newMasterPassword = newMasterPassword.toCharArray(),
+                )
+                onResult(ok)
+            } finally {
+                isCryptoBusyFlow.value = false
+            }
+        }
+    }
+
+    fun runKdfBenchmark(onCompleted: (KdfBenchmarkResult) -> Unit) {
+        viewModelScope.launch {
+            isCryptoBusyFlow.value = true
+            try {
+                val result = repository.benchmarkKdf()
+                onCompleted(result)
+            } finally {
+                isCryptoBusyFlow.value = false
+            }
+        }
     }
 
     fun lockVault() {
+        pendingRecoveryKeyFlow.value = null
         repository.lockVault()
     }
 
@@ -208,7 +316,6 @@ class VaultViewModel(
     fun updateGeneratorConfig(transform: (GeneratorConfig) -> GeneratorConfig) {
         generatorFlow.update { current ->
             val updated = transform(current.config)
-            // Prevent disabling every character class in random password mode.
             val safeConfig = if (
                 updated.mode == GeneratorMode.PASSWORD &&
                 !updated.includeUppercase &&
@@ -271,6 +378,20 @@ class VaultViewModel(
         repository.updateSettings { it.copy(themePreference = preference) }
     }
 
+    private data class RepoBundle(
+        val hasVault: Boolean,
+        val isUnlocked: Boolean,
+        val items: List<VaultItem>,
+        val devices: List<PairedDevice>,
+        val settings: SecuritySettings,
+    )
+
+    private data class CryptoBundle(
+        val metadata: VaultCryptoMetadata,
+        val isBusy: Boolean,
+        val pendingRecoveryKey: String?,
+    )
+
     private data class FilterBundle(
         val query: String,
         val category: VaultCategoryFilter,
@@ -283,7 +404,7 @@ class VaultViewModel(
         val Factory: ViewModelProvider.Factory = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T {
-                return VaultViewModel(MockVaultRepository()) as T
+                return VaultViewModel(EncryptedMemoryVaultRepository()) as T
             }
         }
     }

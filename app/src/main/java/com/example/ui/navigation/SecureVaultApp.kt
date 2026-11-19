@@ -43,6 +43,7 @@ import com.example.ui.screens.CreateVaultScreen
 import com.example.ui.screens.DevicesScreen
 import com.example.ui.screens.GeneratorScreen
 import com.example.ui.screens.ItemDetailScreen
+import com.example.ui.screens.RecoveryKeyCreatedSheet
 import com.example.ui.screens.SettingsScreen
 import com.example.ui.screens.UnlockScreen
 import com.example.ui.screens.VaultHomeScreen
@@ -79,7 +80,6 @@ fun SecureVaultApp(
     var activeTab by remember { mutableStateOf(PrimaryDestination.VAULT) }
     var clipboardClearJob by remember { mutableStateOf<Job?>(null) }
 
-    // Apply FLAG_SECURE cleanly whenever user enables Hide App Preview in Settings.
     DisposableEffect(state.settings.hideAppPreviewEnabled, context) {
         val window = (context as? Activity)?.window
         if (window != null) {
@@ -90,6 +90,16 @@ fun SecureVaultApp(
             }
         }
         onDispose {}
+    }
+
+    fun showTransientMessage(message: String) {
+        coroutineScope.launch {
+            snackbarHostState.currentSnackbarData?.dismiss()
+            snackbarHostState.showSnackbar(
+                message = message,
+                duration = SnackbarDuration.Short,
+            )
+        }
     }
 
     fun copyToClipboardSafely(label: String, value: String, isSecret: Boolean) {
@@ -124,19 +134,12 @@ fun SecureVaultApp(
             }
         }
 
-        // Never display the copied secret value in snackbars or logs.
         val message = if (isSecret && clearInterval != ClipboardClearInterval.OFF) {
             "$label copied • Best-effort clear in ${clearInterval.label}"
         } else {
             "$label copied"
         }
-        coroutineScope.launch {
-            snackbarHostState.currentSnackbarData?.dismiss()
-            snackbarHostState.showSnackbar(
-                message = message,
-                duration = SnackbarDuration.Short,
-            )
-        }
+        showTransientMessage(message)
     }
 
     fun lockAndNavigate() {
@@ -154,15 +157,17 @@ fun SecureVaultApp(
         ) {
             composable(VaultRoutes.ROUTE_WELCOME) {
                 WelcomeScreen(
+                    isBusy = state.isCryptoBusy,
                     onCreateVault = {
                         navController.navigate(VaultRoutes.ROUTE_CREATE_VAULT)
                     },
                     onExploreDemoVault = {
-                        viewModel.openDemoVault()
-                        activeTab = PrimaryDestination.VAULT
-                        navController.navigate(VaultRoutes.ROUTE_MAIN) {
-                            popUpTo(VaultRoutes.ROUTE_WELCOME) { inclusive = true }
-                            launchSingleTop = true
+                        viewModel.openDemoVault {
+                            activeTab = PrimaryDestination.VAULT
+                            navController.navigate(VaultRoutes.ROUTE_MAIN) {
+                                popUpTo(VaultRoutes.ROUTE_WELCOME) { inclusive = true }
+                                launchSingleTop = true
+                            }
                         }
                     },
                 )
@@ -170,13 +175,15 @@ fun SecureVaultApp(
 
             composable(VaultRoutes.ROUTE_CREATE_VAULT) {
                 CreateVaultScreen(
+                    isBusy = state.isCryptoBusy,
                     onBack = { navController.popBackStack() },
                     onCreateVaultConfirmed = { masterPassword ->
-                        viewModel.createVault(masterPassword)
-                        activeTab = PrimaryDestination.VAULT
-                        navController.navigate(VaultRoutes.ROUTE_MAIN) {
-                            popUpTo(VaultRoutes.ROUTE_WELCOME) { inclusive = true }
-                            launchSingleTop = true
+                        viewModel.createVault(masterPassword) {
+                            activeTab = PrimaryDestination.VAULT
+                            navController.navigate(VaultRoutes.ROUTE_MAIN) {
+                                popUpTo(VaultRoutes.ROUTE_WELCOME) { inclusive = true }
+                                launchSingleTop = true
+                            }
                         }
                     },
                 )
@@ -185,25 +192,40 @@ fun SecureVaultApp(
             composable(VaultRoutes.ROUTE_UNLOCK) {
                 UnlockScreen(
                     biometricEnabled = state.settings.biometricUnlockEnabled,
-                    onUnlockWithPassword = { candidate ->
-                        val success = viewModel.attemptUnlock(candidate)
-                        if (success) {
-                            navController.navigate(VaultRoutes.ROUTE_MAIN) {
-                                popUpTo(VaultRoutes.ROUTE_UNLOCK) { inclusive = true }
-                                launchSingleTop = true
+                    isBusy = state.isCryptoBusy,
+                    onUnlockWithPassword = { candidate, onResult ->
+                        viewModel.attemptUnlock(candidate) { success ->
+                            if (success) {
+                                navController.navigate(VaultRoutes.ROUTE_MAIN) {
+                                    popUpTo(VaultRoutes.ROUTE_UNLOCK) { inclusive = true }
+                                    launchSingleTop = true
+                                }
                             }
+                            onResult(success)
                         }
-                        success
                     },
-                    onUnlockWithBiometric = {
-                        val success = viewModel.attemptBiometricUnlock()
-                        if (success) {
-                            navController.navigate(VaultRoutes.ROUTE_MAIN) {
-                                popUpTo(VaultRoutes.ROUTE_UNLOCK) { inclusive = true }
-                                launchSingleTop = true
+                    onUnlockWithBiometric = { onResult ->
+                        viewModel.attemptBiometricUnlock { success ->
+                            if (success) {
+                                navController.navigate(VaultRoutes.ROUTE_MAIN) {
+                                    popUpTo(VaultRoutes.ROUTE_UNLOCK) { inclusive = true }
+                                    launchSingleTop = true
+                                }
                             }
+                            onResult(success)
                         }
-                        success
+                    },
+                    onRecoverWithKey = { recoveryKey, newMasterPassword, onResult ->
+                        viewModel.recoverWithKey(recoveryKey, newMasterPassword) { success ->
+                            if (success) {
+                                navController.navigate(VaultRoutes.ROUTE_MAIN) {
+                                    popUpTo(VaultRoutes.ROUTE_UNLOCK) { inclusive = true }
+                                    launchSingleTop = true
+                                }
+                                showTransientMessage("Vault recovered • VEK re-wrapped under new master password")
+                            }
+                            onResult(success)
+                        }
                     },
                     onReturnToWelcome = {
                         navController.navigate(VaultRoutes.ROUTE_WELCOME) {
@@ -260,9 +282,7 @@ fun SecureVaultApp(
                                 },
                                 onDeleteItem = { itemId ->
                                     viewModel.deleteItem(itemId)
-                                    coroutineScope.launch {
-                                        snackbarHostState.showSnackbar("Item removed from local mock vault")
-                                    }
+                                    showTransientMessage("Encrypted record removed from vault")
                                 },
                                 onCopyField = { label, value, isSecret ->
                                     copyToClipboardSafely(label, value, isSecret)
@@ -291,9 +311,7 @@ fun SecureVaultApp(
                                 devices = state.devices,
                                 onRevokeDevice = { deviceId ->
                                     viewModel.revokeDevice(deviceId)
-                                    coroutineScope.launch {
-                                        snackbarHostState.showSnackbar("Mock device marked revoked")
-                                    }
+                                    showTransientMessage("Mock device marked revoked")
                                 },
                             )
                         }
@@ -301,15 +319,41 @@ fun SecureVaultApp(
                         PrimaryDestination.SETTINGS -> {
                             SettingsScreen(
                                 settings = state.settings,
+                                cryptoMetadata = state.cryptoMetadata,
+                                isCryptoBusy = state.isCryptoBusy,
                                 onAutoLockChange = viewModel::updateAutoLock,
                                 onBiometricChange = viewModel::updateBiometricUnlock,
                                 onClipboardClearChange = viewModel::updateClipboardClear,
                                 onHideAppPreviewChange = viewModel::updateHideAppPreview,
                                 onThemeChange = viewModel::updateThemePreference,
+                                onChangeMasterPassword = { current, newPw, onResult ->
+                                    viewModel.changeMasterPassword(current, newPw) { ok ->
+                                        if (ok) {
+                                            showTransientMessage("Master password updated • VEK re-wrapped (0 records re-encrypted)")
+                                        }
+                                        onResult(ok)
+                                    }
+                                },
+                                onRunKdfBenchmark = {
+                                    viewModel.runKdfBenchmark { result ->
+                                        showTransientMessage("Argon2id measured: ${result.durationMs} ms")
+                                    }
+                                },
                                 onLockVaultNow = { lockAndNavigate() },
                             )
                         }
                     }
+                }
+
+                // Show one-time independent Recovery Key sheet immediately after Create Vault.
+                state.pendingRecoveryKeyReveal?.let { recoveryKey ->
+                    RecoveryKeyCreatedSheet(
+                        recoveryKey = recoveryKey,
+                        onCopyRecoveryKey = { key ->
+                            copyToClipboardSafely("Recovery key", key, true)
+                        },
+                        onConfirmedSaved = viewModel::dismissRecoveryKeyReveal,
+                    )
                 }
             }
 
@@ -332,9 +376,7 @@ fun SecureVaultApp(
                         if (item != null) {
                             viewModel.deleteItem(item.id)
                             navController.popBackStack()
-                            coroutineScope.launch {
-                                snackbarHostState.showSnackbar("Item removed from local mock vault")
-                            }
+                            showTransientMessage("Encrypted record removed from vault")
                         }
                     },
                     onCopyField = { label, value, isSecret ->
@@ -353,9 +395,7 @@ fun SecureVaultApp(
                         viewModel.saveItem(newItem)
                         activeTab = PrimaryDestination.VAULT
                         navController.popBackStack()
-                        coroutineScope.launch {
-                            snackbarHostState.showSnackbar("Saved to local mock vault")
-                        }
+                        showTransientMessage("Encrypted and saved to vault")
                     },
                 )
             }
@@ -373,9 +413,7 @@ fun SecureVaultApp(
                     onSave = { updated ->
                         viewModel.saveItem(updated)
                         navController.popBackStack()
-                        coroutineScope.launch {
-                            snackbarHostState.showSnackbar("Changes saved to local mock vault")
-                        }
+                        showTransientMessage("Encrypted changes saved")
                     },
                 )
             }

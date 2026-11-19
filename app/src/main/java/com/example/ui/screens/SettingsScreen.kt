@@ -37,6 +37,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
+import com.example.data.VaultCryptoMetadata
 import com.example.domain.model.AutoLockInterval
 import com.example.domain.model.ClipboardClearInterval
 import com.example.domain.model.SecuritySettings
@@ -48,15 +49,20 @@ import com.example.ui.theme.VaultTheme
 @Composable
 fun SettingsScreen(
     settings: SecuritySettings,
+    cryptoMetadata: VaultCryptoMetadata,
+    isCryptoBusy: Boolean,
     onAutoLockChange: (AutoLockInterval) -> Unit,
     onBiometricChange: (Boolean) -> Unit,
     onClipboardClearChange: (ClipboardClearInterval) -> Unit,
     onHideAppPreviewChange: (Boolean) -> Unit,
     onThemeChange: (ThemePreference) -> Unit,
+    onChangeMasterPassword: (current: String, newPw: String, onResult: (Boolean) -> Unit) -> Unit,
+    onRunKdfBenchmark: () -> Unit,
     onLockVaultNow: () -> Unit,
 ) {
     val colors = VaultTheme.colors
     var showRecoverySheet by remember { mutableStateOf(false) }
+    var showChangePasswordSheet by remember { mutableStateOf(false) }
     var showLicensesDialog by remember { mutableStateOf(false) }
     var showPrivacyDialog by remember { mutableStateOf(false) }
 
@@ -194,8 +200,40 @@ fun SettingsScreen(
                     HorizontalDivider(color = colors.outlineSubtle)
 
                     SettingsActionRow(
+                        title = "Change master password",
+                        subtitle = "Re-wraps VEK with fresh Argon2id salt without re-encrypting records",
+                        badge = null,
+                        onClick = { showChangePasswordSheet = true },
+                        testTag = "settings_change_password_row",
+                    )
+
+                    HorizontalDivider(color = colors.outlineSubtle)
+
+                    SettingsInfoRow(
+                        title = "Cryptographic engine (Format v${cryptoMetadata.formatVersion})",
+                        subtitle = "${cryptoMetadata.kdfSummary} • AES-256-GCM + AAD • ${cryptoMetadata.encryptedRecordCount} encrypted records",
+                        badge = "Active",
+                    )
+
+                    HorizontalDivider(color = colors.outlineSubtle)
+
+                    val benchmarkSubtitle = cryptoMetadata.lastBenchmark?.let { res ->
+                        "Last measured on this device: ${res.durationMs} ms (${res.parameters.summaryLabel()})"
+                    } ?: "Measure Argon2id (19 MiB, t=2, p=1) derivation latency on this device"
+
+                    SettingsActionRow(
+                        title = if (isCryptoBusy) "Running Argon2id benchmark…" else "Benchmark Argon2id on this device",
+                        subtitle = benchmarkSubtitle,
+                        badge = cryptoMetadata.lastBenchmark?.let { "${it.durationMs} ms" },
+                        onClick = { if (!isCryptoBusy) onRunKdfBenchmark() },
+                        testTag = "settings_benchmark_kdf_row",
+                    )
+
+                    HorizontalDivider(color = colors.outlineSubtle)
+
+                    SettingsActionRow(
                         title = "Lock vault now",
-                        subtitle = "Return immediately to the Unlock screen",
+                        subtitle = "Wipes VEK from memory and returns to Unlock screen",
                         badge = null,
                         onClick = onLockVaultNow,
                         testTag = "settings_lock_now_row",
@@ -276,8 +314,8 @@ fun SettingsScreen(
                 ) {
                     SettingsInfoRow(
                         title = "SecureVault Android",
-                        subtitle = "Version 0.1.0-phase1 • Offline-first UI & architecture baseline",
-                        badge = "Phase 1",
+                        subtitle = "Version 0.2.0-phase2 • Argon2id + AES-256-GCM crypto engine (in-memory)",
+                        badge = "Phase 2",
                     )
                     HorizontalDivider(color = colors.outlineSubtle)
                     SettingsActionRow(
@@ -290,7 +328,7 @@ fun SettingsScreen(
                     HorizontalDivider(color = colors.outlineSubtle)
                     SettingsActionRow(
                         title = "Open-Source Licenses",
-                        subtitle = "Kotlin, Jetpack Compose, Material 3, Plus Jakarta Sans, JetBrains Mono",
+                        subtitle = "Kotlin, Jetpack Compose, Bouncy Castle (MIT), Plus Jakarta Sans, JetBrains Mono",
                         badge = null,
                         onClick = { showLicensesDialog = true },
                         testTag = "settings_licenses_row",
@@ -299,6 +337,19 @@ fun SettingsScreen(
                 Spacer(modifier = Modifier.height(24.dp))
             }
         }
+    }
+
+    if (showChangePasswordSheet) {
+        ChangeMasterPasswordSheet(
+            isBusy = isCryptoBusy,
+            onDismiss = { showChangePasswordSheet = false },
+            onSubmit = { current, newPw, onResult ->
+                onChangeMasterPassword(current, newPw) { ok ->
+                    if (ok) showChangePasswordSheet = false
+                    onResult(ok)
+                }
+            },
+        )
     }
 
     if (showRecoverySheet) {

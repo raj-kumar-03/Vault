@@ -217,10 +217,11 @@ private fun VaultListContent(
         }
 
         item(key = "status") {
+            val meta = state.cryptoMetadata
             SecurityStatusRow(
-                title = "Mock Vault Unlocked",
-                subtitle = "Offline only • No real secrets stored in Phase 1",
-                badgeLabel = "Phase 1",
+                title = "Vault Encrypted (Format v${meta.formatVersion})",
+                subtitle = "${meta.encryptedRecordCount} AES-256-GCM records • In-memory (SQLite in Phase 3)",
+                badgeLabel = "Phase 2",
             )
         }
 

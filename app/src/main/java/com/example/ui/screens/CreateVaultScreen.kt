@@ -58,6 +58,7 @@ import com.example.ui.theme.VaultTheme
 
 @Composable
 fun CreateVaultScreen(
+    isBusy: Boolean = false,
     onBack: () -> Unit,
     onCreateVaultConfirmed: (masterPassword: String) -> Unit,
 ) {
@@ -236,7 +237,7 @@ fun CreateVaultScreen(
                     }
 
                     Text(
-                        text = "In production (Phase 2), a separate recovery key will be generated here. Because SecureVault has no cloud account, forgetting both your master password and recovery key makes the vault permanently unrecoverable.",
+                        text = "Creating this vault generates a random 256-bit Vault Encryption Key (VEK) wrapped by Argon2id and an independent 256-bit Recovery Key. Because SecureVault has no cloud account, losing both makes the vault permanently unrecoverable.",
                         style = MaterialTheme.typography.bodySmall,
                         color = colors.textSecondary,
                     )
@@ -246,7 +247,7 @@ fun CreateVaultScreen(
                         modifier = Modifier.testTag("create_vault_recovery_info_button"),
                     ) {
                         Text(
-                            text = "Read how recovery is planned",
+                            text = "How local recovery works",
                             style = MaterialTheme.typography.labelLarge,
                             color = colors.primary,
                         )
@@ -277,7 +278,7 @@ fun CreateVaultScreen(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "I understand this Phase 1 vault is mock-only, and that a real local vault cannot be reset without my master password or recovery key.",
+                            text = "I understand that forgetting both my master password and recovery key makes an encrypted vault unrecoverable, and that Phase 2 stores encrypted records in memory only until Phase 3.",
                             style = MaterialTheme.typography.bodySmall,
                             color = colors.textPrimary,
                         )
@@ -293,7 +294,8 @@ fun CreateVaultScreen(
             }
 
             PrimaryButton(
-                text = "Create Mock Vault",
+                text = if (isBusy) "Deriving Key & Creating Vault…" else "Create Encrypted Vault",
+                enabled = !isBusy,
                 onClick = { validateAndCreate() },
                 modifier = Modifier.fillMaxWidth(),
                 testTag = "create_vault_submit_button",
