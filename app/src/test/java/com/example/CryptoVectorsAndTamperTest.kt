@@ -9,15 +9,13 @@ import com.example.crypto.KdfParameters
 import com.example.crypto.RecoveryKeyCodec
 import com.example.crypto.TamperedDataException
 import com.example.crypto.UnsupportedFormatVersionException
+import com.example.crypto.VaultBackupCodec
 import com.example.crypto.VaultFormatConstants
 import com.example.crypto.VaultFormatMigrator
 import com.example.crypto.VaultLockedException
 import com.example.crypto.VaultRecordCodec
-import com.example.data.EncryptedMemoryVaultRepository
 import com.example.domain.model.VaultItem
 import com.example.domain.model.VaultItemType
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -360,50 +358,76 @@ class CryptoVectorsAndTamperTest {
     }
 
     @Test
-    fun `encrypted memory repository wipes plaintext on lock and decrypts on unlock`() = runTest {
-        val repo = EncryptedMemoryVaultRepository(
-            kdfParameters = KdfParameters.TEST_FAST,
-            cryptoDispatcher = Dispatchers.Unconfined,
+    fun `vault backup codec v1 roundtrips encrypted vault and rejects tampering or truncation`() {
+        val bundle = engine.createVault("backup-codec-master-pass".toCharArray(), KdfParameters.TEST_FAST)
+        val item = VaultItem(
+            id = "rec-passkey-1",
+            type = VaultItemType.PASSKEY,
+            title = "CodeForge Offline Passkey",
+            username = "alex@example.com",
+            secret = "private-p256-envelope-bytes",
+            website = "https://codeforge.example.com",
+            normalizedDomain = "codeforge.example.com",
+            notes = "Offline passkey envelope",
+            isFavorite = true,
+            createdAtLabel = "Today",
+            updatedAtLabel = "Today",
+            lastUsedEpochMs = 999L,
         )
-        val recoveryKey = repo.createVault("my-strong-vault-pass".toCharArray())
-        assertTrue(recoveryKey.startsWith("SVRK-"))
-
-        repo.upsertItem(
-            VaultItem(
-                id = "",
-                type = VaultItemType.LOGIN,
-                title = "Internal Wiki",
-                username = "alex@example.com",
-                secret = "exact-secret-123!",
-                website = "https://wiki.example.com",
-                normalizedDomain = "wiki.example.com",
-                notes = "",
-                isFavorite = false,
-                createdAtLabel = "Now",
-                updatedAtLabel = "Now",
-                lastUsedEpochMs = 1L,
-            )
+        val encrypted = engine.encryptRecord(
+            sessionKey = bundle.sessionKey,
+            recordId = item.id,
+            recordType = item.type,
+            plaintext = VaultRecordCodec.encode(item),
         )
-        assertEquals(1, repo.items.value.size)
+        bundle.sessionKey.wipe()
 
-        // Lock wipes plaintext list from memory
-        repo.lockVault()
-        assertFalse(repo.isUnlocked.value)
-        assertTrue(repo.items.value.isEmpty())
+        val encoded = VaultBackupCodec.encode(
+            header = bundle.header,
+            records = listOf(encrypted),
+            exportedAtEpochMs = 1_730_000_000_000L,
+        )
 
-        // Wrong password fails
-        assertFalse(repo.unlockWithMasterPassword("incorrect-pass".toCharArray()))
-        assertTrue(repo.items.value.isEmpty())
+        // Ensure plaintext secrets never appear inside encoded .svbk bytes
+        val encodedText = String(encoded, Charsets.ISO_8859_1)
+        assertFalse(encodedText.contains("private-p256-envelope-bytes"))
+        assertFalse(encodedText.contains("CodeForge Offline Passkey"))
 
-        // Right password restores decrypted item
-        assertTrue(repo.unlockWithMasterPassword("my-strong-vault-pass".toCharArray()))
-        assertEquals(1, repo.items.value.size)
-        assertEquals("exact-secret-123!", repo.items.value.first().secret)
+        val summary = VaultBackupCodec.inspect(encoded)
+        assertEquals(VaultBackupCodec.CURRENT_BACKUP_VERSION, summary.backupVersion)
+        assertEquals(VaultFormatConstants.CURRENT_FORMAT_VERSION, summary.vaultFormatVersion)
+        assertEquals(1, summary.recordCount)
 
-        // Lock and recover using recovery key
-        repo.lockVault()
-        assertTrue(repo.recoverWithKey(recoveryKey, "brand-new-recovered-pass".toCharArray()))
-        assertEquals("exact-secret-123!", repo.items.value.first().secret)
+        val decoded = VaultBackupCodec.decode(encoded)
+        assertEquals(bundle.header.vaultId, decoded.header.vaultId)
+        assertEquals(1, decoded.records.size)
+        assertEquals(VaultItemType.PASSKEY, decoded.records.first().recordType)
+
+        // Flip any byte in body -> SHA-256 digest mismatch must reject
+        val tamperedBody = encoded.copyOf().apply { this[10] = (this[10].toInt() xor 0xFF).toByte() }
+        try {
+            VaultBackupCodec.decode(tamperedBody)
+            fail("Expected TamperedDataException on flipped body byte")
+        } catch (_: TamperedDataException) {
+            // expected
+        }
+
+        // Flip a byte in trailing SHA-256 digest -> must reject
+        val tamperedDigest = encoded.copyOf().apply { this[lastIndex] = (this[lastIndex].toInt() xor 0x01).toByte() }
+        try {
+            VaultBackupCodec.decode(tamperedDigest)
+            fail("Expected TamperedDataException on flipped digest byte")
+        } catch (_: TamperedDataException) {
+            // expected
+        }
+
+        // Truncated file -> must reject
+        try {
+            VaultBackupCodec.decode(encoded.copyOf(24))
+            fail("Expected TamperedDataException on truncated backup")
+        } catch (_: TamperedDataException) {
+            // expected
+        }
     }
 
     private fun assertTamperRejected(

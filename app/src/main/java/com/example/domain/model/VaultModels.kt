@@ -2,6 +2,7 @@ package com.example.domain.model
 
 enum class VaultItemType(val displayLabel: String, val pluralLabel: String) {
     LOGIN("Login", "Logins"),
+    PASSKEY("Passkey", "Passkeys"),
     SECURE_NOTE("Secure Note", "Secure Notes"),
     IDENTITY("Identity", "Identities"),
     PAYMENT_CARD("Card", "Cards"),
@@ -11,6 +12,7 @@ enum class VaultCategoryFilter(val label: String) {
     ALL("All"),
     FAVORITES("Favorites"),
     LOGINS("Logins"),
+    PASSKEYS("Passkeys"),
     SECURE_NOTES("Notes"),
     IDENTITIES("Identities"),
     CARDS("Cards"),
@@ -37,6 +39,7 @@ data class VaultItem(
     fun maskedSubtitle(): String {
         return when (type) {
             VaultItemType.LOGIN -> username.ifBlank { normalizedDomain.ifBlank { "No username" } }
+            VaultItemType.PASSKEY -> username.ifBlank { normalizedDomain.ifBlank { "FIDO2 Passkey • Offline" } }
             VaultItemType.SECURE_NOTE -> secondaryIdentifier.ifBlank { "Encrypted note • Masked" }
             VaultItemType.IDENTITY -> username.ifBlank { secondaryIdentifier.ifBlank { "Personal identity" } }
             VaultItemType.PAYMENT_CARD -> secondaryIdentifier.ifBlank { "•••• ••••" }

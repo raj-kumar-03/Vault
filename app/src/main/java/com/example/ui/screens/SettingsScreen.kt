@@ -58,6 +58,8 @@ fun SettingsScreen(
     onThemeChange: (ThemePreference) -> Unit,
     onChangeMasterPassword: (current: String, newPw: String, onResult: (Boolean) -> Unit) -> Unit,
     onRunKdfBenchmark: () -> Unit,
+    onExportEncryptedBackup: () -> Unit,
+    onRestoreEncryptedBackup: () -> Unit,
     onLockVaultNow: () -> Unit,
 ) {
     val colors = VaultTheme.colors
@@ -243,12 +245,18 @@ fun SettingsScreen(
 
             item(key = "autofill_section") {
                 SettingsSection(
-                    title = "Autofill",
-                    subtitle = "Android system autofill integration",
+                    title = "Autofill & Offline Passkeys",
+                    subtitle = "Android system autofill and Credential Provider integration",
                 ) {
                     SettingsInfoRow(
                         title = "Android AutofillService",
                         subtitle = "Strict origin & app-signature matching without cross-origin leakage.",
+                        badge = "Coming in Phase 5",
+                    )
+                    HorizontalDivider(color = colors.outlineSubtle)
+                    SettingsInfoRow(
+                        title = "Offline Android Passkey Provider (API 34+)",
+                        subtitle = "Native FIDO2 / WebAuthn CredentialProviderService storing ECDSA P-256 private keys encrypted inside your local AES-256-GCM vault.",
                         badge = "Coming in Phase 5",
                     )
                 }
@@ -257,12 +265,22 @@ fun SettingsScreen(
             item(key = "backup_section") {
                 SettingsSection(
                     title = "Backup & Recovery",
-                    subtitle = "Offline encrypted export and independent recovery key",
+                    subtitle = "Versioned .svbk v1 encrypted export & SHA-256 verified non-destructive restore",
                 ) {
-                    SettingsInfoRow(
-                        title = "Encrypted Vault Export & Restore",
-                        subtitle = "Versioned authenticated backup files are disabled until Phase 3 storage & Phase 2 cryptography pass review.",
-                        badge = "Coming in Phases 2–3",
+                    SettingsActionRow(
+                        title = "Export encrypted backup (.svbk)",
+                        subtitle = "Saves your AES-256-GCM encrypted vault and wrapped VEKs offline via Android file picker",
+                        badge = "v1",
+                        onClick = { if (!isCryptoBusy) onExportEncryptedBackup() },
+                        testTag = "settings_export_backup_row",
+                    )
+                    HorizontalDivider(color = colors.outlineSubtle)
+                    SettingsActionRow(
+                        title = "Restore from encrypted backup",
+                        subtitle = "Verifies SHA-256 integrity and authenticates every record before touching local SQLite",
+                        badge = null,
+                        onClick = { if (!isCryptoBusy) onRestoreEncryptedBackup() },
+                        testTag = "settings_restore_backup_row",
                     )
                     HorizontalDivider(color = colors.outlineSubtle)
                     SettingsActionRow(
@@ -314,8 +332,8 @@ fun SettingsScreen(
                 ) {
                     SettingsInfoRow(
                         title = "SecureVault Android",
-                        subtitle = "Version 0.2.0-phase2 • Argon2id + AES-256-GCM crypto engine (in-memory)",
-                        badge = "Phase 2",
+                        subtitle = "Version 0.3.0-phase3 • Encrypted SQLite + Argon2id + AES-256-GCM + .svbk backups",
+                        badge = "Phase 3",
                     )
                     HorizontalDivider(color = colors.outlineSubtle)
                     SettingsActionRow(
@@ -370,7 +388,7 @@ fun SettingsScreen(
             text = {
                 Text(
                     "SecureVault does not connect to any cloud backend, analytics provider, crash reporter, or third-party API.\n\n" +
-                        "Phase 1 Prototype Notice: All data in this build lives strictly in memory as synthetic mock records. Do not enter real passwords until Phase 2 cryptography and Phase 3 encrypted persistence are complete and reviewed."
+                        "Phase 3 Local Storage Notice: Vault headers and AES-256-GCM encrypted records persist strictly on-device in local SQLite, with versioned .svbk encrypted backup/restore. Hardware Keystore biometric binding and screen-capture defaults harden further in Phase 4."
                 )
             },
             confirmButton = {
@@ -392,7 +410,8 @@ fun SettingsScreen(
             text = {
                 Text(
                     "• Kotlin & Kotlinx Coroutines (Apache 2.0)\n" +
-                        "• AndroidX Jetpack Compose, Navigation & Material 3 (Apache 2.0)\n" +
+                        "• AndroidX Jetpack Compose, Navigation, Room & Material 3 (Apache 2.0)\n" +
+                        "• Bouncy Castle Crypto Provider — Argon2id & HKDF (MIT License)\n" +
                         "• Plus Jakarta Sans Font (SIL Open Font License 1.1)\n" +
                         "• JetBrains Mono Font (SIL Open Font License 1.1)"
                 )

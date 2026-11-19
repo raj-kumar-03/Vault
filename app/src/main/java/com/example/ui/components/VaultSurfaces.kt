@@ -35,6 +35,7 @@ import androidx.compose.material.icons.outlined.Computer
 import androidx.compose.material.icons.outlined.CreditCard
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Devices
+import androidx.compose.material.icons.outlined.Fingerprint
 import androidx.compose.material.icons.outlined.Key
 import androidx.compose.material.icons.outlined.Laptop
 import androidx.compose.material.icons.outlined.Lock
@@ -728,6 +729,7 @@ fun ConfirmationDialog(
 
 fun itemTypeIcon(type: VaultItemType): ImageVector = when (type) {
     VaultItemType.LOGIN -> Icons.Outlined.VpnKey
+    VaultItemType.PASSKEY -> Icons.Outlined.Fingerprint
     VaultItemType.SECURE_NOTE -> Icons.Outlined.Description
     VaultItemType.IDENTITY -> Icons.Outlined.Badge
     VaultItemType.PAYMENT_CARD -> Icons.Outlined.CreditCard

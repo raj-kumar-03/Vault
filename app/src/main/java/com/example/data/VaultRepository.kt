@@ -2,6 +2,7 @@ package com.example.data
 
 import com.example.crypto.KdfBenchmarkResult
 import com.example.crypto.KdfParameters
+import com.example.crypto.VaultBackupCodec
 import com.example.domain.model.PairedDevice
 import com.example.domain.model.SecuritySettings
 import com.example.domain.model.VaultItem
@@ -12,16 +13,16 @@ data class VaultCryptoMetadata(
     val vaultIdPreview: String = "",
     val kdfSummary: String = KdfParameters.OWASP_MOBILE_BALANCED.summaryLabel(),
     val encryptedRecordCount: Int = 0,
+    val corruptedRecordIds: List<String> = emptyList(),
     val lastBenchmark: KdfBenchmarkResult? = null,
+    val isPersistedToSqlite: Boolean = true,
 )
 
 /**
- * Architectural boundary for vault operations.
- * Phase 2 encrypts all vault records and VEK wrappers in memory via VaultCryptoEngine
- * (Argon2id + HKDF-SHA256 + AES-256-GCM with AAD).
- * Phase 3 will persist the encrypted VaultHeader and EncryptedVaultRecord envelopes to SQLite.
+ * Architectural boundary for encrypted local SQLite vault operations (Phase 3).
  */
 interface VaultRepository {
+    val isStorageInitialized: StateFlow<Boolean>
     val items: StateFlow<List<VaultItem>>
     val hasVault: StateFlow<Boolean>
     val isUnlocked: StateFlow<Boolean>
@@ -34,25 +35,27 @@ interface VaultRepository {
     suspend fun changeMasterPassword(currentPassword: CharArray, newPassword: CharArray): Boolean
     suspend fun recoverWithKey(recoveryKey: String, newMasterPassword: CharArray): Boolean
     suspend fun benchmarkKdf(): KdfBenchmarkResult
+    suspend fun upsertItem(item: VaultItem): VaultItem
+    suspend fun deleteItem(itemId: String)
+    suspend fun toggleFavorite(itemId: String)
+    suspend fun markItemUsed(itemId: String)
+    suspend fun exportEncryptedBackup(): ByteArray
+    suspend fun inspectBackup(backupBytes: ByteArray): VaultBackupCodec.BackupInspectionSummary
+    suspend fun restoreBackupWithMasterPassword(backupBytes: ByteArray, masterPassword: CharArray): Boolean
+    suspend fun restoreBackupWithRecoveryKey(
+        backupBytes: ByteArray,
+        recoveryKey: String,
+        newMasterPassword: CharArray,
+    ): Boolean
     fun lockVault()
-    fun upsertItem(item: VaultItem): VaultItem
-    fun deleteItem(itemId: String)
-    fun toggleFavorite(itemId: String)
-    fun markItemUsed(itemId: String)
 }
 
-/**
- * Architectural boundary for paired device management (mocked until Phase 6).
- */
 interface DeviceRepository {
     val devices: StateFlow<List<PairedDevice>>
     fun revokeDevice(deviceId: String)
 }
 
-/**
- * Architectural boundary for local security and appearance preferences.
- */
 interface SettingsRepository {
     val settings: StateFlow<SecuritySettings>
-    fun updateSettings(transform: (SecuritySettings) -> SecuritySettings)
+    suspend fun updateSettings(transform: (SecuritySettings) -> SecuritySettings)
 }

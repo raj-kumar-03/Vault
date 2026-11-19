@@ -1,7 +1,7 @@
 <resources>
     <string name="app_name">SecureVault</string>
     <string name="tagline">Your passwords. Your control.</string>
-    <string name="phase_one_badge">Phase 2 • Argon2id + AES-256-GCM (In-Memory)</string>
+    <string name="phase_one_badge">Phase 3 • Encrypted Local SQLite Vault</string>
     <string name="nav_vault">Vault</string>
     <string name="nav_generator">Generator</string>
     <string name="nav_devices">Devices</string>

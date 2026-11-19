@@ -1,8 +1,8 @@
-# Vault Cryptographic Format Specification (`v1`)
+# Vault Cryptographic & Storage Format Specification (`v1` / `.svbk v1`)
 
 **Document:** `docs/vault-format.md`  
-**Applies to:** Phase 2 — Cryptographic Engine & Vault Format  
-**Status:** Implemented & verified against RFC 9106 and NIST SP 800-38D vectors
+**Applies to:** Phase 2 (Cryptography) & Phase 3 (Encrypted Local SQLite + Backup Format)  
+**Status:** Implemented & verified against RFC 9106, NIST SP 800-38D, SQLite migration, and `.svbk` tamper tests
 
 ---
 
@@ -25,46 +25,48 @@ masterWrappedVek                            recoveryWrappedVek
                            EncryptedVaultRecord[]
 ```
 
-**Core security properties:**
-- The master password is **never** used directly to encrypt records.
-- Changing the master password or recovering via the independent recovery key **re-wraps only the 32-byte VEK** under a fresh salt and fresh nonce — existing encrypted records remain untouched and valid.
-- The recovery key is cryptographically independent from the master password and protected by a 16-bit SHA-256 checksum to catch transcription typos immediately.
-
 ## 2. Argon2id Parameter Selection Rationale
 
 - **Implementation:** Bouncy Castle `org.bouncycastle:bcprov-jdk18on:1.80` (`Argon2BytesGenerator`, RFC 9106 version `0x13`, Argon2id hybrid mode).
-- **Default interactive mobile profile (`OWASP_MOBILE_BALANCED`):**
-  - `memoryKiB = 19_456` (19 MiB)
-  - `iterations = 2`
-  - `parallelism = 1`
-  - `saltLengthBytes = 16` (128-bit CSPRNG salt)
-  - `hashLengthBytes = 32` (256-bit KEK)
-- **Why this profile:** Matches the OWASP Password Storage Cheat Sheet minimum interactive Argon2id recommendation (`m=19 MiB, t=2, p=1`), avoids out-of-memory pressure on constrained Android devices running pure-Java Bouncy Castle, and keeps unlock latency interactive. A higher-memory profile (`OWASP_HIGH_MEMORY`: 46 MiB, `t=2, p=1`) is defined for higher-RAM devices, and `KdfParameters` are persisted inside `VaultHeader` so vaults can upgrade seamlessly during password rotation.
-- **On-device measurement:** Settings → Security → *Benchmark Argon2id on this device* measures live derivation latency on the user's hardware.
+- **Default interactive mobile profile (`OWASP_MOBILE_BALANCED`):** `m=19_456 KiB` (19 MiB), `t=2`, `p=1`, 16-byte CSPRNG salt, 32-byte KEK.
+- **On-device measurement:** Settings → Security → *Benchmark Argon2id on this device*.
 
-## 3. Authenticated Encryption & Nonce Strategy
+## 3. Authenticated Encryption & Canonical AAD
 
-- **Cipher:** Platform JCA `AES/GCM/NoPadding` (256-bit key, 96-bit nonce, 128-bit authentication tag).
-- **Nonce strategy:** Every encryption call obtains a fresh 12-byte (96-bit) nonce from `SecureRandomNonceGenerator`, rejecting all-zero nonces and enforcing uniqueness across the active session.
-- **Canonical length-prefixed AAD (`AadBuilder`):** All integers are 4-byte big-endian; all strings are UTF-8 preceded by their 4-byte length to prevent boundary-shift collisions:
+- **Cipher:** Platform JCA `AES/GCM/NoPadding` (256-bit key, 96-bit CSPRNG nonce, 128-bit authentication tag).
+- **Canonical length-prefixed AAD (`AadBuilder`):**
   - **Record AAD:** `"SV-REC-AAD-v1" || formatVersion || vaultId || recordId || recordType`
   - **Master VEK Wrap AAD:** `"SV-WRAP-MASTER-v1" || formatVersion || vaultId || keyRotationEpoch`
   - **Recovery VEK Wrap AAD:** `"SV-WRAP-RECOVERY-v1" || formatVersion || vaultId || keyRotationEpoch`
 
 ## 4. Record Plaintext Framing (`VaultRecordCodec` v1)
 
-Encrypted inside `EncryptedVaultRecord.payload`:
+Encrypted inside `vault_records.ciphertext_and_tag`:
 `schemaVersion(Int32=1) || title || username || secret || website || normalizedDomain || notes || isFavorite(Bool) || createdAtLabel || updatedAtLabel || lastUsedEpochMs(Int64) || secondaryIdentifier`
 
-## 5. Versioning & Migration Strategy
+Supported `VaultItemType` values bound into AAD: `LOGIN`, `PASSKEY` (Phase 5 envelope ready), `SECURE_NOTE`, `IDENTITY`, `PAYMENT_CARD`.
 
-- `VaultFormatConstants.CURRENT_FORMAT_VERSION = 1`.
-- `VaultFormatMigrator` validates `formatVersion` before unwrapping headers or decrypting records.
-- Version `0` and unknown future versions (e.g., `v99`) are explicitly rejected with `UnsupportedFormatVersionException` rather than silently corrupted.
+## 5. Local SQLite Schema & Metadata Exposure (`secure_vault.db`, Room v2)
 
-## 6. Memory Hygiene & Error Safety
+| Table | Unencrypted Columns | Encrypted / Protected Blobs | Rationale |
+|---|---|---|---|
+| `vault_headers` | `singleton_id`, `format_version`, `vault_id`, KDF params, `master_salt`, `recovery_salt`, `key_rotation_epoch`, timestamps | `master_wrap_nonce`, `master_wrap_ciphertext`, `recovery_wrap_nonce`, `recovery_wrap_ciphertext` | Enables KDF unlock, password rotation, and recovery without revealing VEK |
+| `vault_records` | `record_id`, `vault_id`, `format_version`, `record_type`, `updated_at_epoch_ms`, `is_deleted`, `record_revision` | `nonce` (12B), `ciphertext_and_tag` (AES-256-GCM) | **Zero plaintext titles, usernames, domains, notes, favorites, or secrets** in SQLite; search runs strictly in memory while unlocked |
+| `vault_preferences` | `singleton_id`, `auto_lock_interval`, `biometric_unlock_enabled`, `clipboard_clear_interval`, `hide_app_preview_enabled`, `theme_preference` | None (non-secret UI/session preferences) | Restores user theme and lock preferences across app restarts |
 
-- Derived KEKs, UTF-8 password byte buffers, raw recovery secrets, and plaintext record buffers are zeroized in `finally` blocks (`ByteArray.fill(0)`).
-- `VaultSessionKey.wipe()` zeroes the in-memory VEK on lock and transitions the session key to inactive (`VaultLockedException` on further access).
-- Note on JVM/ART limitation: `String` instances created by Compose text fields cannot be deterministically wiped in managed runtimes; transient `CharArray` conversion and immediate `ByteArray` zeroization minimize exposure inside the crypto boundary.
-- `VaultCryptoException` subclasses never include passwords, recovery keys, nonces, or plaintext in messages.
+- **Migrations:** `VaultDatabase.MIGRATION_1_2` adds `is_deleted`, `record_revision`, and composite index `(vault_id, is_deleted)` non-destructively without touching encrypted blobs.
+- **Corruption quarantine:** If any row fails AES-256-GCM verification or record decoding on unlock, its `record_id` is collected into `VaultCryptoMetadata.corruptedRecordIds` so intact items still open safely and the user receives a clear warning banner.
+
+## 6. Versioned Encrypted Backup Format (`.svbk` v1 — `VaultBackupCodec`)
+
+```text
+[4B Magic "SVBK"]
+[Int32 backupVersion = 1]
+[Int64 exportedAtEpochMs]
+[VaultHeader: formatVersion, vaultId, KDF params, masterSalt, masterWrappedVek, recoverySalt, recoveryWrappedVek, keyRotationEpoch, timestamps]
+[Int32 recordCount]
+[EncryptedVaultRecord[recordCount]: formatVersion, vaultId, recordId, recordType, nonce, ciphertextAndTag, updatedAtEpochMs]
+[32B SHA-256 integrity digest over all preceding bytes]
+```
+
+**Non-destructive restore guarantee:** Before modifying local SQLite, `PersistentVaultRepository` verifies (1) the 32-byte SHA-256 file digest, (2) backup & vault format versions, (3) VEK unwrapping via Master Password or Recovery Key, and (4) AES-256-GCM authentication and decoding of **every** record in the backup. Only after 100% verification does Room execute `replaceVaultAtomically(...)`.

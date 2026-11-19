@@ -219,10 +219,19 @@ private fun VaultListContent(
         item(key = "status") {
             val meta = state.cryptoMetadata
             SecurityStatusRow(
-                title = "Vault Encrypted (Format v${meta.formatVersion})",
-                subtitle = "${meta.encryptedRecordCount} AES-256-GCM records • In-memory (SQLite in Phase 3)",
-                badgeLabel = "Phase 2",
+                title = "Encrypted SQLite Vault (v${meta.formatVersion})",
+                subtitle = "${meta.encryptedRecordCount} AES-256-GCM records • Offline local storage",
+                badgeLabel = "Phase 3",
             )
+        }
+
+        if (state.cryptoMetadata.corruptedRecordIds.isNotEmpty()) {
+            item(key = "corruption_warning") {
+                com.example.ui.components.InlineError(
+                    message = "${state.cryptoMetadata.corruptedRecordIds.size} encrypted record(s) failed authentication on disk and were quarantined without deleting intact items. Restore from a verified .svbk backup if needed.",
+                    testTag = "vault_corruption_warning",
+                )
+            }
         }
 
         item(key = "search") {

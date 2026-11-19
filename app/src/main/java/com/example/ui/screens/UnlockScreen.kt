@@ -47,7 +47,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.example.R
-import com.example.data.EncryptedMemoryVaultRepository
+import com.example.data.PersistentVaultRepository
 import com.example.ui.components.InlineError
 import com.example.ui.components.PrimaryButton
 import com.example.ui.components.SecretField
@@ -244,12 +244,12 @@ fun UnlockScreen(
                     modifier = Modifier.padding(12.dp),
                 ) {
                     Text(
-                        text = "Phase 2 test hint",
+                        text = "Phase 3 local SQLite hint",
                         style = MaterialTheme.typography.labelSmall,
                         color = colors.textSecondary,
                     )
                     Text(
-                        text = "Demo vault passphrase: ${EncryptedMemoryVaultRepository.DEFAULT_DEMO_PASSPHRASE} (or the password you set).",
+                        text = "Demo vault passphrase: ${PersistentVaultRepository.DEFAULT_DEMO_PASSPHRASE} (or your master password).",
                         style = VaultMonoLabelStyle,
                         color = colors.primary,
                     )

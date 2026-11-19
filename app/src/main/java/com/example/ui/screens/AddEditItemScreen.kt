@@ -239,6 +239,7 @@ fun AddEditItemScreen(
                             Text(
                                 when (itemType) {
                                     VaultItemType.LOGIN -> "Username or Email"
+                                    VaultItemType.PASSKEY -> "Passkey Account / User Handle"
                                     VaultItemType.PAYMENT_CARD -> "Cardholder Name"
                                     VaultItemType.IDENTITY -> "Full Name / Email"
                                     VaultItemType.SECURE_NOTE -> "Category / Label"
@@ -266,6 +267,7 @@ fun AddEditItemScreen(
                         },
                         label = when (itemType) {
                             VaultItemType.LOGIN -> "Password"
+                            VaultItemType.PASSKEY -> "Passkey Reference / Metadata"
                             VaultItemType.SECURE_NOTE -> "Protected Note Secret"
                             VaultItemType.IDENTITY -> "Protected ID / Address"
                             VaultItemType.PAYMENT_CARD -> "Card Number / Details"

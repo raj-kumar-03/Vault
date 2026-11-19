@@ -145,6 +145,7 @@ fun ItemDetailContent(
 
     val secretFieldTitle = when (item.type) {
         VaultItemType.LOGIN -> "Password"
+        VaultItemType.PASSKEY -> "Passkey Key Material (Phase 5 FIDO2)"
         VaultItemType.SECURE_NOTE -> "Protected Note Content"
         VaultItemType.IDENTITY -> "Protected Personal Details"
         VaultItemType.PAYMENT_CARD -> "Card Details"

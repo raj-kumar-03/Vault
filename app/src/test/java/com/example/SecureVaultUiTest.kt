@@ -10,11 +10,17 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextInput
+import androidx.room.Room
+import androidx.test.core.app.ApplicationProvider
 import com.example.crypto.KdfParameters
-import com.example.data.EncryptedMemoryVaultRepository
+import com.example.data.PersistentVaultRepository
+import com.example.data.local.VaultDatabase
 import com.example.ui.navigation.SecureVaultApp
 import com.example.ui.state.VaultViewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runBlocking
+import org.junit.After
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -28,12 +34,33 @@ class SecureVaultUiTest {
     @get:Rule
     val composeTestRule = createComposeRule()
 
-    private fun createFastTestViewModel(): VaultViewModel = VaultViewModel(
-        EncryptedMemoryVaultRepository(
+    private lateinit var testDb: VaultDatabase
+
+    @Before
+    fun setUp() {
+        testDb = Room.inMemoryDatabaseBuilder(
+            ApplicationProvider.getApplicationContext(),
+            VaultDatabase::class.java,
+        )
+            .allowMainThreadQueries()
+            .build()
+    }
+
+    @After
+    fun tearDown() {
+        testDb.close()
+    }
+
+    private fun createFastTestViewModel(): VaultViewModel {
+        val repo = PersistentVaultRepository(
+            vaultDao = testDb.vaultDao(),
             kdfParameters = KdfParameters.TEST_FAST,
+            ioDispatcher = Dispatchers.Unconfined,
             cryptoDispatcher = Dispatchers.Unconfined,
         )
-    )
+        runBlocking { repo.initializeFromDisk() }
+        return VaultViewModel(repo)
+    }
 
     @Test
     fun `welcome to encrypted demo vault and primary navigation tabs work`() {
@@ -124,7 +151,7 @@ class SecureVaultUiTest {
     }
 
     @Test
-    fun `add item validates missing title and saves encrypted record to vault`() {
+    fun `add item validates missing title and saves encrypted record to sqlite vault`() {
         val viewModel = createFastTestViewModel()
         composeTestRule.setContent {
             SecureVaultApp(viewModel = viewModel)
@@ -149,5 +176,38 @@ class SecureVaultUiTest {
         composeTestRule.onNodeWithTag("vault_item_list")
             .performScrollToNode(hasText("Lab Portal"))
         composeTestRule.onNodeWithText("Lab Portal").assertIsDisplayed()
+    }
+
+    @Test
+    fun `cold launch with existing persisted sqlite vault routes directly to unlock screen`() {
+        // Seed a persisted vault in SQLite before launching SecureVaultApp
+        val seedRepo = PersistentVaultRepository(
+            vaultDao = testDb.vaultDao(),
+            kdfParameters = KdfParameters.TEST_FAST,
+            ioDispatcher = Dispatchers.Unconfined,
+            cryptoDispatcher = Dispatchers.Unconfined,
+        )
+        runBlocking {
+            seedRepo.openDemoVault()
+            seedRepo.lockVault()
+        }
+
+        // Fresh ViewModel simulates cold launch reading existing SQLite vault
+        val coldStartVm = createFastTestViewModel()
+        composeTestRule.setContent {
+            SecureVaultApp(viewModel = coldStartVm)
+        }
+        composeTestRule.waitForIdle()
+
+        // Should start directly on UnlockScreen rather than WelcomeScreen
+        composeTestRule.onNodeWithTag("unlock_password_input")
+            .performScrollTo()
+            .performTextInput(PersistentVaultRepository.DEFAULT_DEMO_PASSPHRASE)
+        composeTestRule.onNodeWithTag("unlock_submit_button")
+            .performScrollTo()
+            .performClick()
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithTag("vault_search_input").assertIsDisplayed()
     }
 }

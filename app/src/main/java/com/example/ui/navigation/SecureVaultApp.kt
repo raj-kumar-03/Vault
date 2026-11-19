@@ -8,6 +8,11 @@ import android.content.Context
 import android.os.Build
 import android.os.PersistableBundle
 import android.view.WindowManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
@@ -44,6 +49,7 @@ import com.example.ui.screens.DevicesScreen
 import com.example.ui.screens.GeneratorScreen
 import com.example.ui.screens.ItemDetailScreen
 import com.example.ui.screens.RecoveryKeyCreatedSheet
+import com.example.ui.screens.RestoreBackupSheet
 import com.example.ui.screens.SettingsScreen
 import com.example.ui.screens.UnlockScreen
 import com.example.ui.screens.VaultHomeScreen
@@ -51,9 +57,14 @@ import com.example.ui.screens.WelcomeScreen
 import com.example.ui.state.VaultViewModel
 import com.example.ui.theme.SecureVaultTheme
 import com.example.ui.theme.VaultTheme
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 object VaultRoutes {
     const val ROUTE_WELCOME = "welcome"
@@ -68,17 +79,24 @@ object VaultRoutes {
     fun edit(itemId: String): String = "editor/$itemId"
 }
 
+private const val MAX_IMPORT_BACKUP_BYTES = 16 * 1024 * 1024
+
 @Composable
 fun SecureVaultApp(
-    viewModel: VaultViewModel = viewModel(factory = VaultViewModel.Factory),
+    viewModel: VaultViewModel? = null,
 ) {
-    val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    val resolvedViewModel: VaultViewModel = viewModel ?: viewModel(
+        factory = VaultViewModel.factory(context.applicationContext),
+    )
+
+    val state by resolvedViewModel.uiState.collectAsStateWithLifecycle()
     val navController = rememberNavController()
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
-    val context = LocalContext.current
     var activeTab by remember { mutableStateOf(PrimaryDestination.VAULT) }
     var clipboardClearJob by remember { mutableStateOf<Job?>(null) }
+    var stagedExportBytes by remember { mutableStateOf<ByteArray?>(null) }
 
     DisposableEffect(state.settings.hideAppPreviewEnabled, context) {
         val window = (context as? Activity)?.window
@@ -100,6 +118,70 @@ fun SecureVaultApp(
                 duration = SnackbarDuration.Short,
             )
         }
+    }
+
+    // Zero-permission Android Storage Access Framework (SAF) launcher for .svbk export
+    val exportBackupLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/octet-stream"),
+    ) { uri ->
+        val bytesToWrite = stagedExportBytes
+        stagedExportBytes = null
+        if (uri == null || bytesToWrite == null) return@rememberLauncherForActivityResult
+        coroutineScope.launch {
+            val wroteOk = withContext(Dispatchers.IO) {
+                runCatching {
+                    context.contentResolver.openOutputStream(uri)?.use { out ->
+                        out.write(bytesToWrite)
+                        out.flush()
+                    } ?: error("Output stream unavailable")
+                }.isSuccess
+            }
+            bytesToWrite.fill(0)
+            showTransientMessage(
+                if (wroteOk) "Encrypted backup (.svbk) saved offline"
+                else "Unable to save encrypted backup file"
+            )
+        }
+    }
+
+    // Zero-permission Android Storage Access Framework (SAF) launcher for .svbk restore
+    val importBackupLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        coroutineScope.launch {
+            val bytes = withContext(Dispatchers.IO) {
+                runCatching {
+                    context.contentResolver.openInputStream(uri)?.use { input ->
+                        val raw = input.readBytes()
+                        if (raw.size > MAX_IMPORT_BACKUP_BYTES) null else raw
+                    }
+                }.getOrNull()
+            }
+            if (bytes == null) {
+                showTransientMessage("Unable to read selected backup file")
+            } else {
+                resolvedViewModel.inspectBackupFile(bytes) { errorMsg ->
+                    showTransientMessage(errorMsg)
+                }
+            }
+        }
+    }
+
+    fun startBackupExport() {
+        resolvedViewModel.exportEncryptedBackup { bytes ->
+            if (bytes == null) {
+                showTransientMessage("Unable to prepare encrypted backup")
+                return@exportEncryptedBackup
+            }
+            stagedExportBytes = bytes
+            val stamp = SimpleDateFormat("yyyyMMdd-HHmm", Locale.US).format(Date())
+            exportBackupLauncher.launch("securevault-backup-$stamp.svbk")
+        }
+    }
+
+    fun startBackupImport() {
+        importBackupLauncher.launch(arrayOf("application/octet-stream", "*/*"))
     }
 
     fun copyToClipboardSafely(label: String, value: String, isSecret: Boolean) {
@@ -143,7 +225,7 @@ fun SecureVaultApp(
     }
 
     fun lockAndNavigate() {
-        viewModel.lockVault()
+        resolvedViewModel.lockVault()
         navController.navigate(VaultRoutes.ROUTE_UNLOCK) {
             popUpTo(0) { inclusive = true }
             launchSingleTop = true
@@ -151,9 +233,22 @@ fun SecureVaultApp(
     }
 
     SecureVaultTheme(themePreference = state.settings.themePreference) {
+        if (!state.isStorageInitialized) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(VaultTheme.colors.background),
+            )
+            return@SecureVaultTheme
+        }
+
+        val initialDestination = remember {
+            if (state.hasVault) VaultRoutes.ROUTE_UNLOCK else VaultRoutes.ROUTE_WELCOME
+        }
+
         NavHost(
             navController = navController,
-            startDestination = VaultRoutes.ROUTE_WELCOME,
+            startDestination = initialDestination,
         ) {
             composable(VaultRoutes.ROUTE_WELCOME) {
                 WelcomeScreen(
@@ -162,7 +257,7 @@ fun SecureVaultApp(
                         navController.navigate(VaultRoutes.ROUTE_CREATE_VAULT)
                     },
                     onExploreDemoVault = {
-                        viewModel.openDemoVault {
+                        resolvedViewModel.openDemoVault {
                             activeTab = PrimaryDestination.VAULT
                             navController.navigate(VaultRoutes.ROUTE_MAIN) {
                                 popUpTo(VaultRoutes.ROUTE_WELCOME) { inclusive = true }
@@ -170,6 +265,7 @@ fun SecureVaultApp(
                             }
                         }
                     },
+                    onRestoreBackup = { startBackupImport() },
                 )
             }
 
@@ -178,7 +274,7 @@ fun SecureVaultApp(
                     isBusy = state.isCryptoBusy,
                     onBack = { navController.popBackStack() },
                     onCreateVaultConfirmed = { masterPassword ->
-                        viewModel.createVault(masterPassword) {
+                        resolvedViewModel.createVault(masterPassword) {
                             activeTab = PrimaryDestination.VAULT
                             navController.navigate(VaultRoutes.ROUTE_MAIN) {
                                 popUpTo(VaultRoutes.ROUTE_WELCOME) { inclusive = true }
@@ -194,7 +290,7 @@ fun SecureVaultApp(
                     biometricEnabled = state.settings.biometricUnlockEnabled,
                     isBusy = state.isCryptoBusy,
                     onUnlockWithPassword = { candidate, onResult ->
-                        viewModel.attemptUnlock(candidate) { success ->
+                        resolvedViewModel.attemptUnlock(candidate) { success ->
                             if (success) {
                                 navController.navigate(VaultRoutes.ROUTE_MAIN) {
                                     popUpTo(VaultRoutes.ROUTE_UNLOCK) { inclusive = true }
@@ -205,7 +301,7 @@ fun SecureVaultApp(
                         }
                     },
                     onUnlockWithBiometric = { onResult ->
-                        viewModel.attemptBiometricUnlock { success ->
+                        resolvedViewModel.attemptBiometricUnlock { success ->
                             if (success) {
                                 navController.navigate(VaultRoutes.ROUTE_MAIN) {
                                     popUpTo(VaultRoutes.ROUTE_UNLOCK) { inclusive = true }
@@ -216,7 +312,7 @@ fun SecureVaultApp(
                         }
                     },
                     onRecoverWithKey = { recoveryKey, newMasterPassword, onResult ->
-                        viewModel.recoverWithKey(recoveryKey, newMasterPassword) { success ->
+                        resolvedViewModel.recoverWithKey(recoveryKey, newMasterPassword) { success ->
                             if (success) {
                                 navController.navigate(VaultRoutes.ROUTE_MAIN) {
                                     popUpTo(VaultRoutes.ROUTE_UNLOCK) { inclusive = true }
@@ -265,15 +361,15 @@ fun SecureVaultApp(
                             VaultHomeScreen(
                                 state = state,
                                 isExpandedWidth = isExpandedWidth,
-                                onSearchQueryChange = viewModel::updateSearchQuery,
-                                onSelectCategory = viewModel::selectCategory,
+                                onSearchQueryChange = resolvedViewModel::updateSearchQuery,
+                                onSelectCategory = resolvedViewModel::selectCategory,
                                 onOpenItem = { item ->
-                                    viewModel.selectItem(item.id)
+                                    resolvedViewModel.selectItem(item.id)
                                     if (!isExpandedWidth) {
                                         navController.navigate(VaultRoutes.detail(item.id))
                                     }
                                 },
-                                onToggleFavorite = viewModel::toggleFavorite,
+                                onToggleFavorite = resolvedViewModel::toggleFavorite,
                                 onAddItem = { navController.navigate(VaultRoutes.ROUTE_EDITOR_NEW) },
                                 onOpenGenerator = { activeTab = PrimaryDestination.GENERATOR },
                                 onLockVault = { lockAndNavigate() },
@@ -281,8 +377,8 @@ fun SecureVaultApp(
                                     navController.navigate(VaultRoutes.edit(itemId))
                                 },
                                 onDeleteItem = { itemId ->
-                                    viewModel.deleteItem(itemId)
-                                    showTransientMessage("Encrypted record removed from vault")
+                                    resolvedViewModel.deleteItem(itemId)
+                                    showTransientMessage("Encrypted record removed from SQLite vault")
                                 },
                                 onCopyField = { label, value, isSecret ->
                                     copyToClipboardSafely(label, value, isSecret)
@@ -293,14 +389,14 @@ fun SecureVaultApp(
                         PrimaryDestination.GENERATOR -> {
                             GeneratorScreen(
                                 state = state.generator,
-                                onModeChange = viewModel::updateGeneratorMode,
-                                onConfigChange = viewModel::updateGeneratorConfig,
-                                onRegenerate = viewModel::regeneratePassword,
+                                onModeChange = resolvedViewModel::updateGeneratorMode,
+                                onConfigChange = resolvedViewModel::updateGeneratorConfig,
+                                onRegenerate = resolvedViewModel::regeneratePassword,
                                 onCopyGenerated = { generated ->
                                     copyToClipboardSafely("Generated secret", generated, true)
                                 },
                                 onUseInNewLogin = { generated ->
-                                    viewModel.stageGeneratedPasswordForNewItem(generated)
+                                    resolvedViewModel.stageGeneratedPasswordForNewItem(generated)
                                     navController.navigate(VaultRoutes.ROUTE_EDITOR_NEW)
                                 },
                             )
@@ -310,7 +406,7 @@ fun SecureVaultApp(
                             DevicesScreen(
                                 devices = state.devices,
                                 onRevokeDevice = { deviceId ->
-                                    viewModel.revokeDevice(deviceId)
+                                    resolvedViewModel.revokeDevice(deviceId)
                                     showTransientMessage("Mock device marked revoked")
                                 },
                             )
@@ -321,13 +417,13 @@ fun SecureVaultApp(
                                 settings = state.settings,
                                 cryptoMetadata = state.cryptoMetadata,
                                 isCryptoBusy = state.isCryptoBusy,
-                                onAutoLockChange = viewModel::updateAutoLock,
-                                onBiometricChange = viewModel::updateBiometricUnlock,
-                                onClipboardClearChange = viewModel::updateClipboardClear,
-                                onHideAppPreviewChange = viewModel::updateHideAppPreview,
-                                onThemeChange = viewModel::updateThemePreference,
+                                onAutoLockChange = resolvedViewModel::updateAutoLock,
+                                onBiometricChange = resolvedViewModel::updateBiometricUnlock,
+                                onClipboardClearChange = resolvedViewModel::updateClipboardClear,
+                                onHideAppPreviewChange = resolvedViewModel::updateHideAppPreview,
+                                onThemeChange = resolvedViewModel::updateThemePreference,
                                 onChangeMasterPassword = { current, newPw, onResult ->
-                                    viewModel.changeMasterPassword(current, newPw) { ok ->
+                                    resolvedViewModel.changeMasterPassword(current, newPw) { ok ->
                                         if (ok) {
                                             showTransientMessage("Master password updated • VEK re-wrapped (0 records re-encrypted)")
                                         }
@@ -335,10 +431,12 @@ fun SecureVaultApp(
                                     }
                                 },
                                 onRunKdfBenchmark = {
-                                    viewModel.runKdfBenchmark { result ->
+                                    resolvedViewModel.runKdfBenchmark { result ->
                                         showTransientMessage("Argon2id measured: ${result.durationMs} ms")
                                     }
                                 },
+                                onExportEncryptedBackup = { startBackupExport() },
+                                onRestoreEncryptedBackup = { startBackupImport() },
                                 onLockVaultNow = { lockAndNavigate() },
                             )
                         }
@@ -352,7 +450,7 @@ fun SecureVaultApp(
                         onCopyRecoveryKey = { key ->
                             copyToClipboardSafely("Recovery key", key, true)
                         },
-                        onConfirmedSaved = viewModel::dismissRecoveryKeyReveal,
+                        onConfirmedSaved = resolvedViewModel::dismissRecoveryKeyReveal,
                     )
                 }
             }
@@ -367,16 +465,16 @@ fun SecureVaultApp(
                     item = item,
                     onBack = { navController.popBackStack() },
                     onToggleFavorite = {
-                        if (item != null) viewModel.toggleFavorite(item.id)
+                        if (item != null) resolvedViewModel.toggleFavorite(item.id)
                     },
                     onEdit = {
                         if (item != null) navController.navigate(VaultRoutes.edit(item.id))
                     },
                     onDeleteConfirmed = {
                         if (item != null) {
-                            viewModel.deleteItem(item.id)
+                            resolvedViewModel.deleteItem(item.id)
                             navController.popBackStack()
-                            showTransientMessage("Encrypted record removed from vault")
+                            showTransientMessage("Encrypted record removed from SQLite vault")
                         }
                     },
                     onCopyField = { label, value, isSecret ->
@@ -386,16 +484,17 @@ fun SecureVaultApp(
             }
 
             composable(VaultRoutes.ROUTE_EDITOR_NEW) {
-                val stagedPassword = remember { viewModel.consumePendingGeneratedPassword() }
+                val stagedPassword = remember { resolvedViewModel.consumePendingGeneratedPassword() }
                 AddEditItemScreen(
                     existingItem = null,
                     initialGeneratedPassword = stagedPassword,
                     onCancel = { navController.popBackStack() },
                     onSave = { newItem ->
-                        viewModel.saveItem(newItem)
-                        activeTab = PrimaryDestination.VAULT
-                        navController.popBackStack()
-                        showTransientMessage("Encrypted and saved to vault")
+                        resolvedViewModel.saveItem(newItem) {
+                            activeTab = PrimaryDestination.VAULT
+                            navController.popBackStack()
+                            showTransientMessage("Encrypted and persisted to local SQLite")
+                        }
                     },
                 )
             }
@@ -405,18 +504,55 @@ fun SecureVaultApp(
                 arguments = listOf(navArgument("itemId") { type = NavType.StringType }),
             ) { backStackEntry ->
                 val itemId = backStackEntry.arguments?.getString("itemId")
-                val existing = remember(itemId) { viewModel.findItemById(itemId) }
+                val existing = remember(itemId) { resolvedViewModel.findItemById(itemId) }
                 AddEditItemScreen(
                     existingItem = existing,
                     initialGeneratedPassword = null,
                     onCancel = { navController.popBackStack() },
                     onSave = { updated ->
-                        viewModel.saveItem(updated)
-                        navController.popBackStack()
-                        showTransientMessage("Encrypted changes saved")
+                        resolvedViewModel.saveItem(updated) {
+                            navController.popBackStack()
+                            showTransientMessage("Encrypted changes persisted")
+                        }
                     },
                 )
             }
+        }
+
+        // Global SHA-256 verified encrypted backup restore sheet (accessible from Welcome & Settings)
+        state.pendingBackupRestore?.let { pending ->
+            RestoreBackupSheet(
+                summary = pending.summary,
+                willReplaceExistingVault = state.hasVault,
+                isBusy = state.isCryptoBusy,
+                onDismiss = resolvedViewModel::dismissBackupRestore,
+                onRestoreWithPassword = { masterPassword, onResult ->
+                    resolvedViewModel.restorePendingBackupWithPassword(masterPassword) { ok ->
+                        if (ok) {
+                            activeTab = PrimaryDestination.VAULT
+                            navController.navigate(VaultRoutes.ROUTE_MAIN) {
+                                popUpTo(0) { inclusive = true }
+                                launchSingleTop = true
+                            }
+                            showTransientMessage("Encrypted backup verified and restored to SQLite")
+                        }
+                        onResult(ok)
+                    }
+                },
+                onRestoreWithRecoveryKey = { recoveryKey, newPassword, onResult ->
+                    resolvedViewModel.restorePendingBackupWithRecoveryKey(recoveryKey, newPassword) { ok ->
+                        if (ok) {
+                            activeTab = PrimaryDestination.VAULT
+                            navController.navigate(VaultRoutes.ROUTE_MAIN) {
+                                popUpTo(0) { inclusive = true }
+                                launchSingleTop = true
+                            }
+                            showTransientMessage("Backup recovered and restored under new master password")
+                        }
+                        onResult(ok)
+                    }
+                },
+            )
         }
     }
 }

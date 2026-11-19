@@ -58,6 +58,7 @@ fun WelcomeScreen(
     isBusy: Boolean = false,
     onCreateVault: () -> Unit,
     onExploreDemoVault: () -> Unit,
+    onRestoreBackup: () -> Unit = {},
 ) {
     val colors = VaultTheme.colors
     var activeSheet by remember { mutableStateOf<EducationSheetMode?>(null) }
@@ -165,8 +166,8 @@ fun WelcomeScreen(
                         )
                         WelcomePrincipleRow(
                             icon = Icons.Outlined.VerifiedUser,
-                            title = "Phase 2 Crypto Active (In-Memory)",
-                            description = "Records are encrypted with Argon2id, HKDF-SHA256, and AES-256-GCM with AAD. SQLite disk persistence arrives in Phase 3.",
+                            title = "Encrypted Local SQLite (Phase 3)",
+                            description = "Records persist offline in SQLite using Argon2id, HKDF-SHA256, and AES-256-GCM with AAD plus verified .svbk backups.",
                         )
                     }
                 }
@@ -199,7 +200,8 @@ fun WelcomeScreen(
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     TextButton(
-                        onClick = { activeSheet = EducationSheetMode.RESTORE_COMING_SOON },
+                        onClick = onRestoreBackup,
+                        enabled = !isBusy,
                         modifier = Modifier.testTag("welcome_restore_button"),
                     ) {
                         Icon(
