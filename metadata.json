@@ -1,0 +1,6 @@
+{
+  "name": "SecureVault",
+  "description": "Local-first offline password manager prototype built with Midnight Emerald Material 3 design.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

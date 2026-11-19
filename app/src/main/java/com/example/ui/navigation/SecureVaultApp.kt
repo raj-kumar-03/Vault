@@ -1,0 +1,384 @@
+package com.example.ui.navigation
+
+import android.app.Activity
+import android.content.ClipData
+import android.content.ClipDescription
+import android.content.ClipboardManager
+import android.content.Context
+import android.os.Build
+import android.os.PersistableBundle
+import android.view.WindowManager
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavType
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
+import com.example.R
+import com.example.domain.model.ClipboardClearInterval
+import com.example.ui.components.AppScaffold
+import com.example.ui.components.PrimaryDestination
+import com.example.ui.screens.AddEditItemScreen
+import com.example.ui.screens.CreateVaultScreen
+import com.example.ui.screens.DevicesScreen
+import com.example.ui.screens.GeneratorScreen
+import com.example.ui.screens.ItemDetailScreen
+import com.example.ui.screens.SettingsScreen
+import com.example.ui.screens.UnlockScreen
+import com.example.ui.screens.VaultHomeScreen
+import com.example.ui.screens.WelcomeScreen
+import com.example.ui.state.VaultViewModel
+import com.example.ui.theme.SecureVaultTheme
+import com.example.ui.theme.VaultTheme
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+
+object VaultRoutes {
+    const val ROUTE_WELCOME = "welcome"
+    const val ROUTE_CREATE_VAULT = "create_vault"
+    const val ROUTE_UNLOCK = "unlock"
+    const val ROUTE_MAIN = "main"
+    const val ROUTE_DETAIL = "detail/{itemId}"
+    const val ROUTE_EDITOR_NEW = "editor/new"
+    const val ROUTE_EDITOR_EDIT = "editor/{itemId}"
+
+    fun detail(itemId: String): String = "detail/$itemId"
+    fun edit(itemId: String): String = "editor/$itemId"
+}
+
+@Composable
+fun SecureVaultApp(
+    viewModel: VaultViewModel = viewModel(factory = VaultViewModel.Factory),
+) {
+    val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val navController = rememberNavController()
+    val snackbarHostState = remember { SnackbarHostState() }
+    val coroutineScope = rememberCoroutineScope()
+    val context = LocalContext.current
+    var activeTab by remember { mutableStateOf(PrimaryDestination.VAULT) }
+    var clipboardClearJob by remember { mutableStateOf<Job?>(null) }
+
+    // Apply FLAG_SECURE cleanly whenever user enables Hide App Preview in Settings.
+    DisposableEffect(state.settings.hideAppPreviewEnabled, context) {
+        val window = (context as? Activity)?.window
+        if (window != null) {
+            if (state.settings.hideAppPreviewEnabled) {
+                window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+            } else {
+                window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+            }
+        }
+        onDispose {}
+    }
+
+    fun copyToClipboardSafely(label: String, value: String, isSecret: Boolean) {
+        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+        if (clipboard != null) {
+            val clip = ClipData.newPlainText(label, value)
+            if (isSecret && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                clip.description.extras = PersistableBundle().apply {
+                    putBoolean(ClipDescription.EXTRA_IS_SENSITIVE, true)
+                }
+            }
+            clipboard.setPrimaryClip(clip)
+        }
+
+        val clearInterval = state.settings.clipboardClearInterval
+        clipboardClearJob?.cancel()
+        if (isSecret && clearInterval != ClipboardClearInterval.OFF) {
+            val delayMs = when (clearInterval) {
+                ClipboardClearInterval.THIRTY_SECONDS -> 30_000L
+                ClipboardClearInterval.ONE_MINUTE -> 60_000L
+                ClipboardClearInterval.OFF -> 0L
+            }
+            if (delayMs > 0L) {
+                clipboardClearJob = coroutineScope.launch {
+                    delay(delayMs)
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                        clipboard?.clearPrimaryClip()
+                    } else {
+                        clipboard?.setPrimaryClip(ClipData.newPlainText("", ""))
+                    }
+                }
+            }
+        }
+
+        // Never display the copied secret value in snackbars or logs.
+        val message = if (isSecret && clearInterval != ClipboardClearInterval.OFF) {
+            "$label copied • Best-effort clear in ${clearInterval.label}"
+        } else {
+            "$label copied"
+        }
+        coroutineScope.launch {
+            snackbarHostState.currentSnackbarData?.dismiss()
+            snackbarHostState.showSnackbar(
+                message = message,
+                duration = SnackbarDuration.Short,
+            )
+        }
+    }
+
+    fun lockAndNavigate() {
+        viewModel.lockVault()
+        navController.navigate(VaultRoutes.ROUTE_UNLOCK) {
+            popUpTo(0) { inclusive = true }
+            launchSingleTop = true
+        }
+    }
+
+    SecureVaultTheme(themePreference = state.settings.themePreference) {
+        NavHost(
+            navController = navController,
+            startDestination = VaultRoutes.ROUTE_WELCOME,
+        ) {
+            composable(VaultRoutes.ROUTE_WELCOME) {
+                WelcomeScreen(
+                    onCreateVault = {
+                        navController.navigate(VaultRoutes.ROUTE_CREATE_VAULT)
+                    },
+                    onExploreDemoVault = {
+                        viewModel.openDemoVault()
+                        activeTab = PrimaryDestination.VAULT
+                        navController.navigate(VaultRoutes.ROUTE_MAIN) {
+                            popUpTo(VaultRoutes.ROUTE_WELCOME) { inclusive = true }
+                            launchSingleTop = true
+                        }
+                    },
+                )
+            }
+
+            composable(VaultRoutes.ROUTE_CREATE_VAULT) {
+                CreateVaultScreen(
+                    onBack = { navController.popBackStack() },
+                    onCreateVaultConfirmed = { masterPassword ->
+                        viewModel.createVault(masterPassword)
+                        activeTab = PrimaryDestination.VAULT
+                        navController.navigate(VaultRoutes.ROUTE_MAIN) {
+                            popUpTo(VaultRoutes.ROUTE_WELCOME) { inclusive = true }
+                            launchSingleTop = true
+                        }
+                    },
+                )
+            }
+
+            composable(VaultRoutes.ROUTE_UNLOCK) {
+                UnlockScreen(
+                    biometricEnabled = state.settings.biometricUnlockEnabled,
+                    onUnlockWithPassword = { candidate ->
+                        val success = viewModel.attemptUnlock(candidate)
+                        if (success) {
+                            navController.navigate(VaultRoutes.ROUTE_MAIN) {
+                                popUpTo(VaultRoutes.ROUTE_UNLOCK) { inclusive = true }
+                                launchSingleTop = true
+                            }
+                        }
+                        success
+                    },
+                    onUnlockWithBiometric = {
+                        val success = viewModel.attemptBiometricUnlock()
+                        if (success) {
+                            navController.navigate(VaultRoutes.ROUTE_MAIN) {
+                                popUpTo(VaultRoutes.ROUTE_UNLOCK) { inclusive = true }
+                                launchSingleTop = true
+                            }
+                        }
+                        success
+                    },
+                    onReturnToWelcome = {
+                        navController.navigate(VaultRoutes.ROUTE_WELCOME) {
+                            popUpTo(0) { inclusive = true }
+                            launchSingleTop = true
+                        }
+                    },
+                )
+            }
+
+            composable(VaultRoutes.ROUTE_MAIN) {
+                val colors = VaultTheme.colors
+                AppScaffold(
+                    currentDestination = activeTab,
+                    onSelectDestination = { destination -> activeTab = destination },
+                    onLockVault = { lockAndNavigate() },
+                    snackbarHostState = snackbarHostState,
+                    floatingActionButton = {
+                        if (activeTab == PrimaryDestination.VAULT) {
+                            FloatingActionButton(
+                                onClick = { navController.navigate(VaultRoutes.ROUTE_EDITOR_NEW) },
+                                containerColor = colors.primary,
+                                contentColor = colors.onPrimary,
+                                shape = RoundedCornerShape(16.dp),
+                                modifier = Modifier.testTag("vault_fab_add"),
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.Add,
+                                    contentDescription = stringResource(R.string.cd_add_item),
+                                )
+                            }
+                        }
+                    },
+                ) { isExpandedWidth ->
+                    when (activeTab) {
+                        PrimaryDestination.VAULT -> {
+                            VaultHomeScreen(
+                                state = state,
+                                isExpandedWidth = isExpandedWidth,
+                                onSearchQueryChange = viewModel::updateSearchQuery,
+                                onSelectCategory = viewModel::selectCategory,
+                                onOpenItem = { item ->
+                                    viewModel.selectItem(item.id)
+                                    if (!isExpandedWidth) {
+                                        navController.navigate(VaultRoutes.detail(item.id))
+                                    }
+                                },
+                                onToggleFavorite = viewModel::toggleFavorite,
+                                onAddItem = { navController.navigate(VaultRoutes.ROUTE_EDITOR_NEW) },
+                                onOpenGenerator = { activeTab = PrimaryDestination.GENERATOR },
+                                onLockVault = { lockAndNavigate() },
+                                onEditItem = { itemId ->
+                                    navController.navigate(VaultRoutes.edit(itemId))
+                                },
+                                onDeleteItem = { itemId ->
+                                    viewModel.deleteItem(itemId)
+                                    coroutineScope.launch {
+                                        snackbarHostState.showSnackbar("Item removed from local mock vault")
+                                    }
+                                },
+                                onCopyField = { label, value, isSecret ->
+                                    copyToClipboardSafely(label, value, isSecret)
+                                },
+                            )
+                        }
+
+                        PrimaryDestination.GENERATOR -> {
+                            GeneratorScreen(
+                                state = state.generator,
+                                onModeChange = viewModel::updateGeneratorMode,
+                                onConfigChange = viewModel::updateGeneratorConfig,
+                                onRegenerate = viewModel::regeneratePassword,
+                                onCopyGenerated = { generated ->
+                                    copyToClipboardSafely("Generated secret", generated, true)
+                                },
+                                onUseInNewLogin = { generated ->
+                                    viewModel.stageGeneratedPasswordForNewItem(generated)
+                                    navController.navigate(VaultRoutes.ROUTE_EDITOR_NEW)
+                                },
+                            )
+                        }
+
+                        PrimaryDestination.DEVICES -> {
+                            DevicesScreen(
+                                devices = state.devices,
+                                onRevokeDevice = { deviceId ->
+                                    viewModel.revokeDevice(deviceId)
+                                    coroutineScope.launch {
+                                        snackbarHostState.showSnackbar("Mock device marked revoked")
+                                    }
+                                },
+                            )
+                        }
+
+                        PrimaryDestination.SETTINGS -> {
+                            SettingsScreen(
+                                settings = state.settings,
+                                onAutoLockChange = viewModel::updateAutoLock,
+                                onBiometricChange = viewModel::updateBiometricUnlock,
+                                onClipboardClearChange = viewModel::updateClipboardClear,
+                                onHideAppPreviewChange = viewModel::updateHideAppPreview,
+                                onThemeChange = viewModel::updateThemePreference,
+                                onLockVaultNow = { lockAndNavigate() },
+                            )
+                        }
+                    }
+                }
+            }
+
+            composable(
+                route = VaultRoutes.ROUTE_DETAIL,
+                arguments = listOf(navArgument("itemId") { type = NavType.StringType }),
+            ) { backStackEntry ->
+                val itemId = backStackEntry.arguments?.getString("itemId")
+                val item = state.items.firstOrNull { it.id == itemId }
+                ItemDetailScreen(
+                    item = item,
+                    onBack = { navController.popBackStack() },
+                    onToggleFavorite = {
+                        if (item != null) viewModel.toggleFavorite(item.id)
+                    },
+                    onEdit = {
+                        if (item != null) navController.navigate(VaultRoutes.edit(item.id))
+                    },
+                    onDeleteConfirmed = {
+                        if (item != null) {
+                            viewModel.deleteItem(item.id)
+                            navController.popBackStack()
+                            coroutineScope.launch {
+                                snackbarHostState.showSnackbar("Item removed from local mock vault")
+                            }
+                        }
+                    },
+                    onCopyField = { label, value, isSecret ->
+                        copyToClipboardSafely(label, value, isSecret)
+                    },
+                )
+            }
+
+            composable(VaultRoutes.ROUTE_EDITOR_NEW) {
+                val stagedPassword = remember { viewModel.consumePendingGeneratedPassword() }
+                AddEditItemScreen(
+                    existingItem = null,
+                    initialGeneratedPassword = stagedPassword,
+                    onCancel = { navController.popBackStack() },
+                    onSave = { newItem ->
+                        viewModel.saveItem(newItem)
+                        activeTab = PrimaryDestination.VAULT
+                        navController.popBackStack()
+                        coroutineScope.launch {
+                            snackbarHostState.showSnackbar("Saved to local mock vault")
+                        }
+                    },
+                )
+            }
+
+            composable(
+                route = VaultRoutes.ROUTE_EDITOR_EDIT,
+                arguments = listOf(navArgument("itemId") { type = NavType.StringType }),
+            ) { backStackEntry ->
+                val itemId = backStackEntry.arguments?.getString("itemId")
+                val existing = remember(itemId) { viewModel.findItemById(itemId) }
+                AddEditItemScreen(
+                    existingItem = existing,
+                    initialGeneratedPassword = null,
+                    onCancel = { navController.popBackStack() },
+                    onSave = { updated ->
+                        viewModel.saveItem(updated)
+                        navController.popBackStack()
+                        coroutineScope.launch {
+                            snackbarHostState.showSnackbar("Changes saved to local mock vault")
+                        }
+                    },
+                )
+            }
+        }
+    }
+}
